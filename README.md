@@ -32,7 +32,7 @@ Worker Token、Client API Key、匹配规则和轮换步骤见 [认证与密钥�
 | `allocator/allocator.json` | 中央分配器端口、回收策略、API Key 和 Worker 文件位置 |
 | `config/workers.json` | Worker 的固定 ID、IP、管理地址和 Token |
 
-`allocator/allocator.json`、`config/workers.json`、实际 Worker 配置和 `logs` 都是本机运行文件，已加入 `.gitignore`，不会提交到 Git。
+当前 `allocator/allocator.json`、`config/workers.json` 和实际 Worker 配置已纳入 Git。`logs`、证书、密钥和环境文件继续由 `.gitignore` 排除。
 
 ## 1. 修改地址和密码
 
@@ -86,7 +86,7 @@ C:\UE_PIXEL_STREAMING_SERVER\WebServers
 D:\GameBuilds\Windows
 ```
 
-首次部署或新克隆仓库后，从脱敏示例创建实际配置：
+当前实际配置已随仓库提交。需要恢复默认配置或新增 Worker 时，可以复制示例：
 
 ```powershell
 Copy-Item `
@@ -102,7 +102,7 @@ Copy-Item `
   "C:\UE_PIXEL_STREAMING_SERVER\Orchestrator\agent\worker-01.json"
 ```
 
-实际配置生成后不要再覆盖正在使用的文件。
+复制示例前确认目标文件是否需要保留；不要覆盖正在使用的实际配置。
 
 先修改所有 Worker 配置：
 

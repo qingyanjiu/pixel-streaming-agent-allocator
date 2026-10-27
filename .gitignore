@@ -3,12 +3,6 @@ logs/
 *.log
 *.processes.json
 
-# Real deployment configuration contains IP addresses and secrets
-allocator/allocator.json
-config/workers.json
-agent/worker*.json
-!agent/worker-template.json
-
 # Local environment and credentials
 .env
 .env.*

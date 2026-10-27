@@ -1,0 +1,22 @@
+{
+  "listenHost": "0.0.0.0",
+  "listenPort": 9200,
+  "nodeExecutable": "C:/UE_PIXEL_STREAMING_SERVER/WebServers/SignallingWebServer/platform_scripts/cmd/node/node.exe",
+  "apiKey": "replace-with-a-long-random-client-api-key",
+  "pollIntervalMs": 2000,
+  "workerRequestTimeoutMs": 5000,
+  "workerStartTimeoutMs": 210000,
+  "workerStopTimeoutMs": 30000,
+  "connectTimeoutMs": 600000,
+  "idleReleaseMs": 600000,
+  "defaultTtlSeconds": 3600,
+  "minTtlSeconds": 60,
+  "maxTtlSeconds": 86400,
+  "autoStart": true,
+  "stopOnRelease": true,
+  "sessionRetentionMs": 3600000,
+  "corsAllowedOrigins": [
+    "*"
+  ],
+  "workersFile": "../config/workers.json"
+}
