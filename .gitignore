@@ -1,0 +1,28 @@
+# Runtime logs and process state
+logs/
+*.log
+*.processes.json
+
+# Real deployment configuration contains IP addresses and secrets
+allocator/allocator.json
+config/workers.json
+agent/worker*.json
+!agent/worker-template.json
+
+# Local environment and credentials
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+
+# Node.js generated files
+node_modules/
+coverage/
+
+# Editor and OS files
+.idea/
+.vscode/
+*.swp
+Thumbs.db
+.DS_Store

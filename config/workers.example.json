@@ -1,0 +1,14 @@
+{
+  "workers": [
+    {
+      "id": "worker-01",
+      "baseUrl": "http://WORKER_01_IP:9101",
+      "token": "replace-with-worker-01-token"
+    },
+    {
+      "id": "worker-02",
+      "baseUrl": "http://WORKER_02_IP:9101",
+      "token": "replace-with-worker-02-token"
+    }
+  ]
+}

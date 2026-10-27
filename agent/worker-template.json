@@ -1,0 +1,67 @@
+{
+  "agentId": "worker-01",
+  "listenHost": "0.0.0.0",
+  "listenPort": 9101,
+  "authToken": "replace-with-a-unique-worker-token",
+  "windowsDirectory": "C:/UE_DEMO/Windows",
+  "webServersDirectory": "C:/UE_PIXEL_STREAMING_SERVER/WebServers",
+  "nodeExecutable": "SignallingWebServer/platform_scripts/cmd/node/node.exe",
+  "signallingDirectory": "SignallingWebServer",
+  "gameExecutable": "UE_ANDA.exe",
+  "gameWorkingDirectory": ".",
+  "logsDirectory": "logs",
+  "localHost": "127.0.0.1",
+  "startupTimeoutMs": 180000,
+  "serverTimeoutMs": 30000,
+  "stopTimeoutMs": 15000,
+  "peerOptionsFile": "",
+  "maxPlayers": 1,
+  "wilburExtraArgs": [],
+  "ueArgs": [
+    "-ExecCmds=r.RayTracing.Culling 2, r.RayTracing.Culling.Radius 40000, r.RayTracing.Culling.Angle 1.0",
+    "-RenderOffScreen",
+    "-windowed",
+    "-ForceRes",
+    "-Unattended",
+    "-NoSplash",
+    "-NoVerifyGC",
+    "-NoVSync",
+    "-AllowPixelStreamingCommands",
+    "-PixelStreamingWebRTCFps=30",
+    "-PixelStreamingWebRTCMaxFps=30",
+    "-PixelStreamingWebRTCMinBitrate=100000000",
+    "-PixelStreamingWebRTCMaxBitrate=100000000",
+    "-PixelStreamingEncoderMinQP=28",
+    "-PixelStreamingEncoderMaxQP=30",
+    "-PixelStreamingEncoderRateControl=CBR",
+    "-PixelStreamingEncoderKeyFrameInterval=60",
+    "-PixelStreamingWebRTCDisableReceiveAudio",
+    "-SILENT"
+  ],
+  "slots": [
+    {
+      "id": "W01-1",
+      "streamerPort": 8001,
+      "playerPort": 801,
+      "sfuPort": 9001,
+      "publicUrl": "http://WORKER_IP:801/",
+      "maxPlayers": 1,
+      "ueArgs": [
+        "-ResX=1920",
+        "-ResY=1080"
+      ]
+    },
+    {
+      "id": "W01-2",
+      "streamerPort": 8002,
+      "playerPort": 802,
+      "sfuPort": 9002,
+      "publicUrl": "http://WORKER_IP:802/",
+      "maxPlayers": 1,
+      "ueArgs": [
+        "-ResX=1920",
+        "-ResY=1080"
+      ]
+    }
+  ]
+}
