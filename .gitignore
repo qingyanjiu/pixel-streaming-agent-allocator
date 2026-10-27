@@ -1,7 +1,13 @@
-# Runtime logs and process state
+# Runtime logs and generated state
 logs/
 *.log
 *.processes.json
+*.pid
+
+# Installed dependencies
+node_modules/
+coverage/
+.pnpm-store/
 
 # Local environment and credentials
 .env
@@ -9,10 +15,6 @@ logs/
 *.pem
 *.key
 *.pfx
-
-# Node.js generated files
-node_modules/
-coverage/
 
 # Editor and OS files
 .idea/
