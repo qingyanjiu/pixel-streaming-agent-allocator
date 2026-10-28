@@ -124,6 +124,9 @@ C:\UE_PIXEL_STREAMING_SERVER\Worker\stop-all-slots.bat
 
 如果 Slot 正在被 Allocator 分配，Agent 会停掉对应 UE/Wilbur，但 Allocator 中的 Session 可能先进入 `disconnected`，等待重连窗口结束后才完全释放。
 
+直接结束 UE 进程与停止 Slot 的差异，以及异常恢复步骤，见
+[UE 进程与 Slot 停止说明](../Docs/UE进程与Slot停止说明.md)。
+
 关闭整个 Worker Agent、全部 Slot 和 Allocator，请使用部署根目录：
 
 ```bat
