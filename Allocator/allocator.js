@@ -10,7 +10,7 @@ const {
     parseArguments,
     resolveFrom,
     timingSafeEqual
-} = require('../common/runtime');
+} = require('./common/runtime');
 
 const DEFAULTS = {
     listenHost: '0.0.0.0',

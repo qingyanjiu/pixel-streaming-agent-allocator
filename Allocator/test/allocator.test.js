@@ -10,7 +10,7 @@ const {
     createAllocator,
     loadAllocatorConfiguration,
     validateConfig
-} = require('../allocator/allocator');
+} = require('../allocator');
 
 async function listen(server) {
     await new Promise((resolve, reject) => {

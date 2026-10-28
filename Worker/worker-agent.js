@@ -15,7 +15,7 @@ const {
     resolveFrom,
     timingSafeEqual,
     writeJsonAtomic
-} = require('../common/runtime');
+} = require('./common/runtime');
 
 const DEFAULT_STARTUP_TIMEOUT_MS = 120_000;
 const DEFAULT_SERVER_TIMEOUT_MS = 30_000;
@@ -92,8 +92,8 @@ function childExitDescription(code, signal) {
 function resolveWorkerPaths(config, options = {}) {
     const configPath = options.configPath || path.join(process.cwd(), 'worker.json');
     const configDirectory = path.dirname(path.resolve(configPath));
-    const orchestratorDirectory =
-        options.orchestratorDirectory || path.resolve(__dirname, '..');
+    const workerDirectory =
+        options.workerDirectory || path.resolve(__dirname);
     const legacyRoot = config.repoRoot
         ? resolveFrom(configDirectory, config.repoRoot)
         : configDirectory;
@@ -119,15 +119,15 @@ function resolveWorkerPaths(config, options = {}) {
         ? resolveFrom(windowsDirectory, config.gameWorkingDirectory)
         : windowsDirectory;
     const logsDirectory = config.logsDirectory
-        ? resolveFrom(orchestratorDirectory, config.logsDirectory)
-        : path.join(orchestratorDirectory, 'logs');
+        ? resolveFrom(workerDirectory, config.logsDirectory)
+        : path.join(workerDirectory, 'logs');
     const peerOptionsFile = config.peerOptionsFile
         ? resolveFrom(configDirectory, config.peerOptionsFile)
         : '';
 
     return {
         configDirectory,
-        orchestratorDirectory,
+        workerDirectory,
         windowsDirectory,
         webServersDirectory,
         nodeExecutable,

@@ -6,7 +6,7 @@ const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
-const { createWorkerAgent, resolveWorkerPaths } = require('../agent/worker-agent');
+const { createWorkerAgent, resolveWorkerPaths } = require('../worker-agent');
 
 const repositoryRoot = path.resolve(__dirname, '..', '..');
 
@@ -122,7 +122,7 @@ test('Worker Agent starts, reports readiness, observes players, and stops one sl
 });
 
 test('Worker path resolution keeps Windows and WebServers directories independent', () => {
-    const configPath = path.join(repositoryRoot, 'Orchestrator', 'agent', 'test-worker.json');
+    const configPath = path.join(repositoryRoot, 'Worker', 'test-worker.json');
     const paths = resolveWorkerPaths(
         {
             windowsDirectory: 'D:/GameBuilds/Windows',
@@ -136,7 +136,7 @@ test('Worker path resolution keeps Windows and WebServers directories independen
         },
         {
             configPath,
-            orchestratorDirectory: 'C:/PixelStreamingOrchestrator'
+            workerDirectory: 'C:/PixelStreamingWorker'
         }
     );
 
@@ -151,7 +151,7 @@ test('Worker path resolution keeps Windows and WebServers directories independen
         path.normalize('E:/PixelStreaming/WebServers/SignallingWebServer')
     );
     assert.equal(paths.gameExecutable, path.normalize('D:/GameBuilds/Windows/UE_ANDA.exe'));
-    assert.equal(paths.logsDirectory, path.normalize('C:/PixelStreamingOrchestrator/logs'));
+    assert.equal(paths.logsDirectory, path.normalize('C:/PixelStreamingWorker/logs'));
     assert.equal(
         paths.peerOptionsFile,
         path.resolve(path.dirname(configPath), 'turn.json')

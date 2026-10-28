@@ -17,7 +17,10 @@ try {
     }
 
     if (-not [string]::IsNullOrWhiteSpace($candidate)) {
-        if (-not [System.IO.Path]::IsPathRooted($candidate)) {
+        $command = Get-Command $candidate -ErrorAction SilentlyContinue
+        if ($null -ne $command) {
+            $candidate = $command.Source
+        } elseif (-not [System.IO.Path]::IsPathRooted($candidate)) {
             $baseDirectory = $config.webServersDirectory
             if ([string]::IsNullOrWhiteSpace($baseDirectory)) {
                 $baseDirectory = $configDirectory
@@ -26,7 +29,9 @@ try {
             }
             $candidate = Join-Path $baseDirectory $candidate
         }
-        $candidate = [System.IO.Path]::GetFullPath($candidate)
+        if (-not [string]::IsNullOrWhiteSpace($candidate)) {
+            $candidate = [System.IO.Path]::GetFullPath($candidate)
+        }
     }
 
     if ([string]::IsNullOrWhiteSpace($candidate) -or -not (Test-Path -LiteralPath $candidate -PathType Leaf)) {

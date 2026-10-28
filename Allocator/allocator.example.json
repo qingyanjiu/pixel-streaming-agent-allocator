@@ -1,7 +1,7 @@
 {
   "listenHost": "0.0.0.0",
   "listenPort": 9200,
-  "nodeExecutable": "C:/UE_PIXEL_STREAMING_SERVER/WebServers/SignallingWebServer/platform_scripts/cmd/node/node.exe",
+  "nodeExecutable": "node.exe",
   "apiKey": "replace-with-a-long-random-client-api-key",
   "pollIntervalMs": 2000,
   "workerRequestTimeoutMs": 5000,
@@ -18,5 +18,5 @@
   "corsAllowedOrigins": [
     "http://localhost:3000"
   ],
-  "workersFile": "../config/workers.json"
+  "workersFile": "./config/workers.json"
 }
