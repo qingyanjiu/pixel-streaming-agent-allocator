@@ -96,6 +96,8 @@ Worker\worker-template.json
 
 ## 文档
 
+- [流资源驾驶舱](http://Allocator-IP:9200/dashboard/)
+- [驾驶舱说明](Docs/驾驶舱说明.md)
 - [启动说明](Docs/启动说明.md)
 - [架构说明](Docs/架构说明.md)
 - [认证与密钥说明](Docs/认证与密钥说明.md)

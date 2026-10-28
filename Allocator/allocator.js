@@ -2,6 +2,7 @@
 
 const http = require('node:http');
 const crypto = require('node:crypto');
+const fs = require('node:fs/promises');
 const path = require('node:path');
 const {
     fetchJson,
@@ -27,7 +28,9 @@ const DEFAULTS = {
     autoStart: true,
     stopOnRelease: true,
     sessionRetentionMs: 3_600_000,
-    corsAllowedOrigins: []
+    corsAllowedOrigins: [],
+    dashboardEnabled: true,
+    dashboardDirectory: 'www'
 };
 
 function validateConfig(config) {
@@ -89,6 +92,7 @@ function createAllocator(config, options = {}) {
     const settings = { ...DEFAULTS, ...config };
     const logger = options.logger || console;
     const apiKey = getSecret(settings.apiKey, settings.apiKeyEnv);
+    const dashboardDirectory = resolveFrom(__dirname, settings.dashboardDirectory);
     const workers = settings.workers.map((worker) => ({
         ...worker,
         token: getSecret(worker.token, worker.tokenEnv),
@@ -632,6 +636,43 @@ function createAllocator(config, options = {}) {
         response.end(body);
     }
 
+    const dashboardAssets = new Map([
+        ['/dashboard/', { file: 'index.html', type: 'text/html; charset=utf-8' }],
+        ['/dashboard/index.html', { file: 'index.html', type: 'text/html; charset=utf-8' }],
+        ['/dashboard/dashboard.css', { file: 'dashboard.css', type: 'text/css; charset=utf-8' }],
+        ['/dashboard/dashboard.js', { file: 'dashboard.js', type: 'text/javascript; charset=utf-8' }]
+    ]);
+
+    function sendRedirect(response, location) {
+        response.writeHead(302, {
+            Location: location,
+            'Cache-Control': 'no-store',
+            'Content-Length': '0'
+        });
+        response.end();
+    }
+
+    async function serveDashboardAsset(request, response, asset) {
+        const filePath = path.join(dashboardDirectory, asset.file);
+        try {
+            const body = await fs.readFile(filePath);
+            response.writeHead(200, {
+                'Content-Type': asset.type,
+                'Content-Length': body.length,
+                'Cache-Control': 'no-cache',
+                'Content-Security-Policy':
+                    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+                'X-Content-Type-Options': 'nosniff',
+                'X-Frame-Options': 'DENY',
+                'Referrer-Policy': 'no-referrer'
+            });
+            response.end(request.method === 'HEAD' ? undefined : body);
+        } catch (error) {
+            logger.error(`[allocator] Dashboard asset unavailable: ${filePath}: ${error.message}`);
+            sendJson(response, 404, { error: 'dashboard_asset_not_found' });
+        }
+    }
+
     async function readJsonBody(request) {
         const chunks = [];
         let length = 0;
@@ -710,6 +751,21 @@ function createAllocator(config, options = {}) {
                 return;
             }
 
+            if (
+                settings.dashboardEnabled &&
+                (request.method === 'GET' || request.method === 'HEAD')
+            ) {
+                if (url.pathname === '/' || url.pathname === '/dashboard') {
+                    sendRedirect(response, '/dashboard/');
+                    return;
+                }
+                const asset = dashboardAssets.get(url.pathname);
+                if (asset) {
+                    await serveDashboardAsset(request, response, asset);
+                    return;
+                }
+            }
+
             if (request.method === 'GET' && url.pathname === '/health') {
                 sendJson(response, 200, {
                     ok: true,
@@ -734,6 +790,7 @@ function createAllocator(config, options = {}) {
                 sendJson(response, 200, {
                     workers: workers.map((worker) => ({
                         id: worker.id,
+                        baseUrl: worker.baseUrl,
                         online: worker.online,
                         lastSeenAt: worker.lastSeenAt,
                         lastError: worker.lastError

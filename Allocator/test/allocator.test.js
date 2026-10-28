@@ -285,6 +285,28 @@ test('Allocator reserves warm capacity, starts a cold slot, and releases disconn
         'X-API-Key': 'client-token'
     };
 
+    const dashboardResponse = await fetch(`${baseUrl}/dashboard/`);
+    assert.equal(dashboardResponse.status, 200);
+    assert.match(await dashboardResponse.text(), /流资源驾驶舱/);
+    assert.match(
+        dashboardResponse.headers.get('content-security-policy'),
+        /script-src 'self'/
+    );
+
+    const dashboardScript = await fetch(`${baseUrl}/dashboard/dashboard.js`);
+    assert.equal(dashboardScript.status, 200);
+    assert.match(await dashboardScript.text(), /REFRESH_INTERVAL_MS = 3000/);
+
+    const dashboardRedirect = await fetch(`${baseUrl}/dashboard`, {
+        redirect: 'manual'
+    });
+    assert.equal(dashboardRedirect.status, 302);
+    assert.equal(dashboardRedirect.headers.get('location'), '/dashboard/');
+
+    const slotInventory = await requestJson(`${baseUrl}/api/slots`, { headers });
+    assert.equal(slotInventory.response.status, 200);
+    assert.equal(slotInventory.payload.workers[0].baseUrl, `http://127.0.0.1:${agentPort}`);
+
     const preflight = await fetch(`${baseUrl}/api/sessions`, {
         method: 'OPTIONS',
         headers: {

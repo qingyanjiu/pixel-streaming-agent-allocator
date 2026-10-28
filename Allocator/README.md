@@ -92,6 +92,20 @@ GET http://Allocator-IP:9200/api/slots
 X-API-Key: <apiKey>
 ```
 
+## 流资源驾驶舱
+
+Allocator 内置只读驾驶舱：
+
+```text
+http://Allocator-IP:9200/dashboard/
+```
+
+页面提供总路数、就绪/未就绪统计、Worker、Slot、Player、Session 和异常列表。
+
+使用 `allocator.json` 中的 `apiKey` 登录。详细说明：
+
+- [驾驶舱说明](../Docs/驾驶舱说明.md)
+
 ## 测试
 
 Allocator 测试只依赖 Node.js：

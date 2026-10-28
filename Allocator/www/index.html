@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>Pixel Streaming Fleet Console</title>
+    <link rel="stylesheet" href="/dashboard/dashboard.css">
+    <script defer src="/dashboard/dashboard.js"></script>
+</head>
+<body>
+    <div class="ambient ambient-a"></div>
+    <div class="ambient ambient-b"></div>
+
+    <section class="auth-layer" id="authLayer" aria-labelledby="authTitle">
+        <form class="auth-card" id="authForm">
+            <div class="brand-mark brand-mark-large" aria-hidden="true">
+                <span>PS</span>
+            </div>
+            <p class="eyebrow">PIXEL STREAMING CONTROL PLANE</p>
+            <h1 id="authTitle">Fleet Console</h1>
+            <p class="auth-copy">
+                输入 Allocator 的 Client API Key，查看 Worker、Slot 和实时占用情况。
+            </p>
+            <label class="field-label" for="apiKey">Client API Key</label>
+            <div class="secret-field">
+                <input
+                    id="apiKey"
+                    name="apiKey"
+                    type="password"
+                    autocomplete="off"
+                    spellcheck="false"
+                    placeholder="请输入 allocator.json 中的 apiKey"
+                    required
+                >
+                <button class="icon-button reveal-button" id="revealKey" type="button" aria-label="显示密钥">
+                    <span aria-hidden="true">◉</span>
+                </button>
+            </div>
+            <p class="auth-error" id="authError" role="alert" aria-live="polite"></p>
+            <button class="primary-button auth-submit" type="submit">
+                <span>进入驾驶舱</span>
+                <span aria-hidden="true">→</span>
+            </button>
+            <p class="auth-note">密钥只保存在当前浏览器标签页的 sessionStorage 中。</p>
+        </form>
+    </section>
+
+    <div class="shell" id="appShell" aria-hidden="true">
+        <header class="topbar">
+            <a class="brand" href="/dashboard/" aria-label="刷新驾驶舱">
+                <span class="brand-mark" aria-hidden="true">PS</span>
+                <span class="brand-copy">
+                    <strong>Pixel Streaming</strong>
+                    <small>Fleet Console</small>
+                </span>
+            </a>
+            <div class="topbar-meta">
+                <span class="live-state" id="liveState">
+                    <span class="live-dot"></span>
+                    <span id="liveLabel">连接中</span>
+                </span>
+                <span class="clock" id="clock">--:--:--</span>
+                <button class="ghost-button" id="refreshButton" type="button">
+                    <span aria-hidden="true">↻</span>
+                    刷新
+                </button>
+                <button class="ghost-button" id="lockButton" type="button">
+                    <span aria-hidden="true">⌁</span>
+                    锁定
+                </button>
+            </div>
+        </header>
+
+        <main class="content">
+            <section class="hero panel">
+                <div class="hero-copy">
+                    <p class="eyebrow">LIVE RESOURCE OVERVIEW</p>
+                    <h1>流资源驾驶舱</h1>
+                    <p>
+                        Allocator、Worker 和 Slot 的实时资源分布。
+                        <span id="lastUpdated">等待首次同步</span>
+                    </p>
+                    <div class="hero-chips">
+                        <span class="chip">
+                            <i class="chip-dot chip-dot-green"></i>
+                            Worker <strong id="onlineWorkers">0 / 0</strong> 在线
+                        </span>
+                        <span class="chip">
+                            总容量 <strong id="totalCapacity">0</strong>
+                        </span>
+                        <span class="chip">
+                            <i class="chip-dot chip-dot-blue"></i>
+                            自动同步 <strong>3s</strong>
+                        </span>
+                    </div>
+                </div>
+                <div class="readiness-orbit" id="readinessOrbit">
+                    <div class="orbit-core">
+                        <strong id="readinessPercent">0%</strong>
+                        <span>就绪率</span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="notice hidden" id="noticeBanner" aria-live="polite"></section>
+
+            <section class="metric-grid" aria-label="资源统计">
+                <article class="metric-card metric-total">
+                    <span class="metric-label">总路数</span>
+                    <strong id="statTotal">0</strong>
+                    <span class="metric-foot">Allocator 登记的全部 Slot</span>
+                </article>
+                <article class="metric-card metric-ready">
+                    <span class="metric-label">已就绪</span>
+                    <strong id="statReady">0</strong>
+                    <span class="metric-foot">Wilbur 与 UE 可用</span>
+                </article>
+                <article class="metric-card metric-unready">
+                    <span class="metric-label">未就绪</span>
+                    <strong id="statUnready">0</strong>
+                    <span class="metric-foot">停止、启动中或异常</span>
+                </article>
+                <article class="metric-card metric-free">
+                    <span class="metric-label">空闲可用</span>
+                    <strong id="statAvailable">0</strong>
+                    <span class="metric-foot">就绪且没有占用</span>
+                </article>
+                <article class="metric-card metric-players">
+                    <span class="metric-label">活跃 Player</span>
+                    <strong id="statPlayers">0</strong>
+                    <span class="metric-foot">当前全部 Slot 的 Player 数</span>
+                </article>
+                <article class="metric-card metric-leased">
+                    <span class="metric-label">已预留</span>
+                    <strong id="statLeased">0</strong>
+                    <span class="metric-foot">已绑定客户端 Session</span>
+                </article>
+            </section>
+
+            <section class="overview-grid">
+                <article class="panel worker-panel">
+                    <div class="panel-heading">
+                        <div>
+                            <p class="eyebrow">WORKER FLEET</p>
+                            <h2>Worker 节点</h2>
+                        </div>
+                        <span class="panel-count" id="workerSummary">0 个节点</span>
+                    </div>
+                    <div class="table-wrap compact-table">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>节点</th>
+                                    <th>状态</th>
+                                    <th>Slot</th>
+                                    <th>Player</th>
+                                    <th>最后在线</th>
+                                </tr>
+                            </thead>
+                            <tbody id="workerRows"></tbody>
+                        </table>
+                    </div>
+                    <div class="empty-state hidden" id="workerEmpty">没有 Worker 信息</div>
+                </article>
+
+                <article class="panel distribution-panel">
+                    <div class="panel-heading">
+                        <div>
+                            <p class="eyebrow">RESOURCE DISTRIBUTION</p>
+                            <h2>状态分布</h2>
+                        </div>
+                    </div>
+                    <div class="distribution-list" id="distributionList"></div>
+                </article>
+            </section>
+
+            <section class="panel slot-panel">
+                <div class="panel-heading slot-heading">
+                    <div>
+                        <p class="eyebrow">SLOT INVENTORY</p>
+                        <h2>流资源列表</h2>
+                    </div>
+                    <div class="slot-actions">
+                        <label class="search-box">
+                            <span aria-hidden="true">⌕</span>
+                            <input id="slotSearch" type="search" placeholder="搜索 Slot、Worker 或 URL">
+                        </label>
+                        <label class="toggle-control">
+                            <input id="autoRefresh" type="checkbox" checked>
+                            <span class="toggle-track" aria-hidden="true"></span>
+                            自动刷新
+                        </label>
+                    </div>
+                </div>
+
+                <div class="filter-row">
+                    <div class="filter-tabs" id="statusFilters" role="group" aria-label="状态筛选">
+                        <button class="filter-button active" type="button" data-status="all">全部</button>
+                        <button class="filter-button" type="button" data-status="ready">就绪</button>
+                        <button class="filter-button" type="button" data-status="busy">占用</button>
+                        <button class="filter-button" type="button" data-status="stopped">停止</button>
+                        <button class="filter-button" type="button" data-status="failed">异常</button>
+                    </div>
+                    <label class="select-control">
+                        <span>Worker</span>
+                        <select id="workerFilter">
+                            <option value="all">全部节点</option>
+                        </select>
+                    </label>
+                </div>
+
+                <div class="table-wrap">
+                    <table class="slot-table">
+                        <thead>
+                            <tr>
+                                <th>Slot</th>
+                                <th>Worker</th>
+                                <th>状态</th>
+                                <th>Player</th>
+                                <th>端口</th>
+                                <th>公开地址</th>
+                                <th>进程 PID</th>
+                                <th>Session</th>
+                                <th>错误</th>
+                            </tr>
+                        </thead>
+                        <tbody id="slotRows"></tbody>
+                    </table>
+                </div>
+                <div class="empty-state hidden" id="slotEmpty">当前筛选条件下没有 Slot</div>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <span>Pixel Streaming Agent Allocator</span>
+            <span id="footerSync">等待数据</span>
+        </footer>
+    </div>
+
+    <div class="toast hidden" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
