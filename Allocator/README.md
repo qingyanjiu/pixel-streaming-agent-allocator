@@ -92,6 +92,18 @@ GET http://Allocator-IP:9200/api/slots
 X-API-Key: <apiKey>
 ```
 
+受 Client API Key 保护的关闭接口：
+
+```http
+POST http://Allocator-IP:9200/shutdown
+X-API-Key: <apiKey>
+Content-Type: application/json
+
+{}
+```
+
+通常不需要手工调用，建议使用部署根目录的 `stop-all.bat`。
+
 ## 流资源驾驶舱
 
 Allocator 内置只读驾驶舱：

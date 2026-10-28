@@ -893,6 +893,16 @@ function createAllocator(config, options = {}) {
                 return;
             }
 
+            if (request.method === 'POST' && url.pathname === '/shutdown') {
+                await readJsonBody(request);
+                logEvent('shutdown_request', {
+                    client: clientAddress
+                });
+                sendJson(response, 202, { accepted: true });
+                setImmediate(() => void close());
+                return;
+            }
+
             sendJson(response, 404, { error: 'not_found' });
         } catch (error) {
             logger.error(`[allocator] HTTP ${request.method} ${request.url}: ${error.stack || error.message}`);
@@ -917,6 +927,9 @@ function createAllocator(config, options = {}) {
                 return;
             }
             server.close(resolve);
+            if (typeof server.closeAllConnections === 'function') {
+                server.closeAllConnections();
+            }
         });
     }
 

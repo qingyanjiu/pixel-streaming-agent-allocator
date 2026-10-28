@@ -469,4 +469,13 @@ test('Allocator reserves warm capacity, starts a cold slot, and releases disconn
 
     const unauthorized = await requestJson(`${baseUrl}/api/slots`);
     assert.equal(unauthorized.response.status, 401);
+
+    const shutdown = await requestJson(`${baseUrl}/shutdown`, {
+        method: 'POST',
+        headers,
+        body: '{}'
+    });
+    assert.equal(shutdown.response.status, 202);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(allocator.server.listening, false);
 });

@@ -780,13 +780,6 @@ function createWorkerAgent(config, options = {}) {
             return;
         }
         closing = true;
-        await new Promise((resolve) => {
-            if (!server.listening) {
-                resolve();
-                return;
-            }
-            server.close(resolve);
-        });
         if (stopAll) {
             await Promise.all(
                 Array.from(slots.keys(), async (slotId) => {
@@ -798,6 +791,16 @@ function createWorkerAgent(config, options = {}) {
                 })
             );
         }
+        await new Promise((resolve) => {
+            if (!server.listening) {
+                resolve();
+                return;
+            }
+            server.close(resolve);
+            if (typeof server.closeAllConnections === 'function') {
+                server.closeAllConnections();
+            }
+        });
     }
 
     return {

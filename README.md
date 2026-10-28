@@ -59,6 +59,26 @@ Worker\stop-slot.bat W01-1
 Worker\stop-all-slots.bat
 ```
 
+停止所有 Worker Agent、全部 UE/Wilbur 和本地 Allocator：
+
+```bat
+stop-all.bat
+```
+
+脚本会读取 `Allocator\config\workers.json`，默认要求输入 `YES` 确认。
+
+自动化场景：
+
+```bat
+stop-all.bat --force
+```
+
+只查看会停止哪些服务：
+
+```bat
+stop-all.bat --what-if
+```
+
 说明：[Worker README](Worker/README.md)
 
 ## WebServers

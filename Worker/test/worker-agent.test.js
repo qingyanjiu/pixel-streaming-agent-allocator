@@ -144,6 +144,33 @@ test('Worker Agent starts, reports readiness, observes players, and stops one sl
     assert.equal(stopped.running, false);
     assert.equal(stopped.playerCount, 0);
     assert.ok(logLines.some((line) => line.includes('event=slot_stopped')));
+
+    const restarted = await requestJson(
+        `http://127.0.0.1:${agentPort}/slots/T1/start`,
+        { method: 'POST', headers: authHeaders }
+    );
+    assert.equal(restarted.status, 'ready');
+
+    const shutdown = await requestJson(
+        `http://127.0.0.1:${agentPort}/shutdown`,
+        {
+            method: 'POST',
+            headers: authHeaders,
+            body: '{}'
+        }
+    );
+    assert.equal(shutdown.accepted, true);
+
+    for (let attempt = 0; attempt < 40; attempt++) {
+        if (!agent.server.listening && agent.slots.get('T1').status === 'stopped') {
+            break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    assert.equal(agent.server.listening, false);
+    assert.equal(agent.slots.get('T1').status, 'stopped');
+    assert.equal(agent.slots.get('T1').wilburChild, null);
+    assert.equal(agent.slots.get('T1').ueChild, null);
 });
 
 test('Worker path resolution keeps Windows and WebServers directories independent', () => {
