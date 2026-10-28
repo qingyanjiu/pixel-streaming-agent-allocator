@@ -7,7 +7,7 @@
     },
     {
       "id": "worker-02",
-      "baseUrl": "http://WORKER_02_IP:9101",
+      "baseUrl": "http://192.168.1.189:9101",
       "token": "replace-with-a-unique-worker-token"
     }
   ]
