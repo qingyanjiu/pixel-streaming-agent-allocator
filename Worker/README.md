@@ -17,6 +17,9 @@ Worker\
 ├── test\
 │   ├── worker-agent.test.js
 │   └── fixtures\
+├── stop-slot.bat
+├── stop-all-slots.bat
+├── stop-slot.ps1
 └── start-worker.bat
 ```
 
@@ -96,6 +99,30 @@ start-worker.bat D:\WorkerConfigs\worker-07.json
 ```
 
 一个 Worker Agent 启动时不会立即拉起 UE。Allocator 分配 Slot 后才会启动 Wilbur 和 UE。
+
+## 手动停止 Slot
+
+关闭一个指定 Slot 的 UE 和 Wilbur，但保留 Worker Agent：
+
+```bat
+C:\UE_PIXEL_STREAMING_SERVER\Worker\stop-slot.bat W01-1
+```
+
+使用其他 Worker 配置：
+
+```bat
+stop-slot.bat W07-1 worker07.json
+```
+
+关闭当前配置中的全部 Slot，但保留 Worker Agent：
+
+```bat
+C:\UE_PIXEL_STREAMING_SERVER\Worker\stop-all-slots.bat
+```
+
+脚本自动从 Worker 配置读取 `listenPort`、`authToken` 和 Slot 列表，不会在命令行明文传入 Token。
+
+如果 Slot 正在被 Allocator 分配，Agent 会停掉对应 UE/Wilbur，但 Allocator 中的 Session 可能先进入 `disconnected`，等待重连窗口结束后才完全释放。
 
 ## 健康检查
 

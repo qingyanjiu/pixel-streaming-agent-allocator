@@ -47,6 +47,18 @@ Windows 游戏构建
 Worker\start-worker.bat worker01.json
 ```
 
+手动关闭一个 Slot：
+
+```bat
+Worker\stop-slot.bat W01-1
+```
+
+关闭当前 Worker 的全部 Slot：
+
+```bat
+Worker\stop-all-slots.bat
+```
+
 说明：[Worker README](Worker/README.md)
 
 ## WebServers
