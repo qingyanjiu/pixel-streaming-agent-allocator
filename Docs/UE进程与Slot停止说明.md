@@ -74,7 +74,7 @@ Slot 无法立即重新分配
 同时停止指定 Slot 的 UE 和 Wilbur：
 
 ```bat
-C:\UE_PIXEL_STREAMING_SERVER\Worker\stop-slot.bat slot01
+Worker\stop-slot.bat slot01
 ```
 
 这是单路维护和单路故障清理的推荐方式。
@@ -84,13 +84,13 @@ C:\UE_PIXEL_STREAMING_SERVER\Worker\stop-slot.bat slot01
 停止当前 Worker Agent 管理的全部 Slot，但保留 Agent：
 
 ```bat
-C:\UE_PIXEL_STREAMING_SERVER\Worker\stop-all-slots.bat
+Worker\stop-all-slots.bat
 ```
 
 ### 停止全部 Worker、UE 和 Allocator
 
 ```bat
-C:\UE_PIXEL_STREAMING_SERVER\stop-all.bat
+stop-all.bat
 ```
 
 ## 5. 应急按 PID 停止单个 UE
@@ -99,7 +99,7 @@ C:\UE_PIXEL_STREAMING_SERVER\stop-all.bat
 
 ```powershell
 $config = Get-Content -Raw `
-  C:\UE_PIXEL_STREAMING_SERVER\Worker\worker01.json |
+  Worker\worker01.json |
   ConvertFrom-Json
 
 $headers = @{
@@ -123,7 +123,7 @@ Stop-Process -Id $slot.pids.ue -Force
 完成应急处理后，应继续清理 Wilbur：
 
 ```bat
-C:\UE_PIXEL_STREAMING_SERVER\Worker\stop-slot.bat slot01
+Worker\stop-slot.bat slot01
 ```
 
 ## 6. 如何恢复被杀掉的 Slot

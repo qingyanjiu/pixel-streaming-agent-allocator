@@ -2,12 +2,12 @@
   "workers": [
     {
       "id": "worker01",
-      "baseUrl": "http://WORKER_01_IP:9101",
+      "baseUrl": "http://WORKER01_IP:9101",
       "token": "replace-with-worker01-token"
     },
     {
       "id": "worker02",
-      "baseUrl": "http://WORKER_02_IP:9101",
+      "baseUrl": "http://WORKER02_IP:9101",
       "token": "replace-with-worker02-token"
     }
   ]

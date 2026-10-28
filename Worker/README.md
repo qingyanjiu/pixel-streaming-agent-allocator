@@ -2,6 +2,8 @@
 
 Worker Agent 运行在每台 GPU 机器上，负责按 Slot 启动 Wilbur 和 UE，并上报就绪、Player 数量和进程状态。
 
+除特别说明外，本文路径和命令都相对于项目根目录。
+
 该目录可以单独部署到 Worker 机器，不需要复制 Allocator 源码。
 
 ## 目录内容
@@ -28,14 +30,14 @@ Worker\
 Worker 机器还需要：
 
 ```text
-C:\UE_PIXEL_STREAMING_SERVER\WebServers
-D:\YourGameBuild\Windows
+WebServers
+<Windows构建目录>
 ```
 
 如果从 Git 克隆后没有 `node_modules`，先安装 WebServers 依赖：
 
 ```powershell
-Set-Location C:\UE_PIXEL_STREAMING_SERVER\WebServers
+Set-Location WebServers
 npm ci
 ```
 
@@ -45,8 +47,8 @@ npm ci
 
 ```powershell
 Copy-Item `
-  "C:\UE_PIXEL_STREAMING_SERVER\Worker\worker-template.json" `
-  "C:\UE_PIXEL_STREAMING_SERVER\Worker\worker01.json"
+  "Worker\worker-template.json" `
+  "Worker\worker01.json"
 ```
 
 当前实际配置为 [worker01.json](worker01.json)。
@@ -57,9 +59,9 @@ Copy-Item `
 {
   "agentId": "worker01",
   "listenPort": 9101,
-  "authToken": "WORKER_01_TOKEN",
-  "windowsDirectory": "D:/YourGameBuild/Windows",
-  "webServersDirectory": "C:/UE_PIXEL_STREAMING_SERVER/WebServers",
+  "authToken": "WORKER01_TOKEN",
+  "windowsDirectory": "<Windows构建目录>",
+  "webServersDirectory": "../WebServers",
   "nodeExecutable": "SignallingWebServer/platform_scripts/cmd/node/node.exe",
   "signallingDirectory": "SignallingWebServer",
   "gameExecutable": "UE_ANDA.exe",
@@ -70,7 +72,7 @@ Copy-Item `
 `logsDirectory=logs` 会解析到：
 
 ```text
-C:\UE_PIXEL_STREAMING_SERVER\Worker\logs
+Worker\logs
 ```
 
 每个 Slot 必须有独立的：
@@ -86,7 +88,7 @@ Worker 和 Slot 统一使用 `worker01`、`slot01` 格式。Slot ID 只要求在
 ## 启动
 
 ```bat
-C:\UE_PIXEL_STREAMING_SERVER\Worker\start-worker.bat worker01.json
+Worker\start-worker.bat worker01.json
 ```
 
 配置省略 `.json` 也可以：
@@ -98,7 +100,7 @@ start-worker.bat worker01
 也可以传入配置完整路径：
 
 ```bat
-start-worker.bat D:\WorkerConfigs\worker07.json
+start-worker.bat Worker\worker07.json
 ```
 
 一个 Worker Agent 启动时不会立即拉起 UE。Allocator 分配 Slot 后才会启动 Wilbur 和 UE。
@@ -108,7 +110,7 @@ start-worker.bat D:\WorkerConfigs\worker07.json
 关闭一个指定 Slot 的 UE 和 Wilbur，但保留 Worker Agent：
 
 ```bat
-C:\UE_PIXEL_STREAMING_SERVER\Worker\stop-slot.bat slot01
+Worker\stop-slot.bat slot01
 ```
 
 使用其他 Worker 配置：
@@ -120,7 +122,7 @@ stop-slot.bat slot01 worker07.json
 关闭当前配置中的全部 Slot，但保留 Worker Agent：
 
 ```bat
-C:\UE_PIXEL_STREAMING_SERVER\Worker\stop-all-slots.bat
+Worker\stop-all-slots.bat
 ```
 
 脚本自动从 Worker 配置读取 `listenPort`、`authToken` 和 Slot 列表，不会在命令行明文传入 Token。
@@ -133,7 +135,7 @@ C:\UE_PIXEL_STREAMING_SERVER\Worker\stop-all-slots.bat
 关闭整个 Worker Agent、全部 Slot 和 Allocator，请使用部署根目录：
 
 ```bat
-C:\UE_PIXEL_STREAMING_SERVER\stop-all.bat
+stop-all.bat
 ```
 
 ## 健康检查
@@ -145,8 +147,8 @@ http://Worker-IP:9101/health
 ## 测试
 
 ```powershell
-& C:\UE_PIXEL_STREAMING_SERVER\WebServers\SignallingWebServer\platform_scripts\cmd\node\node.exe `
-  --test C:\UE_PIXEL_STREAMING_SERVER\Worker\test\worker-agent.test.js
+& WebServers\SignallingWebServer\platform_scripts\cmd\node\node.exe `
+  --test Worker\test\worker-agent.test.js
 ```
 
 ## 相关文档

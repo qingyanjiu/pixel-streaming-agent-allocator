@@ -2,6 +2,8 @@
 
 Allocator 是中央会话分配服务，负责管理 Worker 清单、申请 Session、冷启动实例、断线保留和超时回收。
 
+除特别说明外，本文路径和命令都相对于项目根目录。
+
 该目录可以单独复制到 Allocator 机器，不需要复制 Worker Agent 源码、WebServers 或 UE 游戏构建。
 
 ## 目录内容
@@ -37,7 +39,7 @@ Allocator\
 如果 `node.exe` 不在系统 PATH 中，可以填写绝对路径，或启动前设置：
 
 ```bat
-set "PS_NODE_EXE=D:\Tools\node\node.exe"
+set "PS_NODE_EXE=node.exe"
 ```
 
 ## 配置
@@ -58,8 +60,8 @@ set "PS_NODE_EXE=D:\Tools\node\node.exe"
   "workers": [
     {
       "id": "worker01",
-      "baseUrl": "http://WORKER_01_IP:9101",
-      "token": "WORKER_01_TOKEN"
+      "baseUrl": "http://WORKER01_IP:9101",
+      "token": "WORKER01_TOKEN"
     }
   ]
 }
@@ -73,7 +75,7 @@ Worker ID 应使用 `worker01`、`worker02` 格式，并全局唯一。完整规
 ## 启动
 
 ```bat
-C:\UE_PIXEL_STREAMING_SERVER\Allocator\start-allocator.bat
+Allocator\start-allocator.bat
 ```
 
 如果只复制了 Allocator 目录，也可以直接从该目录运行：
@@ -126,7 +128,7 @@ http://Allocator-IP:9200/dashboard/
 Allocator 测试只依赖 Node.js：
 
 ```powershell
-Set-Location C:\UE_PIXEL_STREAMING_SERVER\Allocator
+Set-Location Allocator
 node --test test\allocator.test.js
 ```
 

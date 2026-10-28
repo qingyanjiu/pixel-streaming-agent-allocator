@@ -4,8 +4,10 @@ UE 5.8 Pixel Streaming 多机器按需分配系统。
 
 仓库按部署职责拆分：
 
+以下路径和命令除特别说明外，都相对于项目根目录。
+
 ```text
-C:\UE_PIXEL_STREAMING_SERVER\
+项目根目录\
 ├── Allocator\    # 中央分配服务，可单独部署
 ├── Worker\       # GPU 机器代理，可单独部署
 ├── Docs\         # 架构、启动、认证和前端文档
@@ -88,13 +90,13 @@ stop-all.bat --what-if
 WebServers 是 Worker 的共享外部依赖，固定路径为：
 
 ```text
-C:\UE_PIXEL_STREAMING_SERVER\WebServers
+WebServers
 ```
 
 `node_modules` 不提交到 Git。新克隆后需要安装：
 
 ```powershell
-Set-Location C:\UE_PIXEL_STREAMING_SERVER\WebServers
+Set-Location WebServers
 npm ci
 ```
 
