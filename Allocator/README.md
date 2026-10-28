@@ -107,3 +107,4 @@ node --test test\allocator.test.js
 - [认证与密钥](../Docs/认证与密钥说明.md)
 - [完整启动说明](../Docs/启动说明.md)
 - [架构说明](../Docs/架构说明.md)
+- [调试与日志](../Docs/调试与日志说明.md)

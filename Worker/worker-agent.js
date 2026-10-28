@@ -215,6 +215,24 @@ function createWorkerAgent(config, options = {}) {
     const localHost = config.localHost || '127.0.0.1';
     const logger = options.logger || console;
 
+    function logSlotEvent(slot, event, fields = {}) {
+        const details = Object.entries(fields)
+            .filter(([, value]) => value !== undefined && value !== null && value !== '')
+            .map(([key, value]) => `${key}=${String(value).replace(/\s+/g, '_')}`)
+            .join(' ');
+        logger.log(
+            `[worker] ${new Date().toISOString()} event=${event} worker=${config.agentId} slot=${slot.config.id}${details ? ` ${details}` : ''}`
+        );
+    }
+
+    function getClientAddress(request) {
+        const forwarded = request.headers['x-forwarded-for'];
+        if (typeof forwarded === 'string' && forwarded.trim()) {
+            return forwarded.split(',')[0].trim();
+        }
+        return request.socket.remoteAddress || 'unknown';
+    }
+
     if (!fs.existsSync(gameExecutable)) {
         logger.warn(`Game executable does not exist yet: ${gameExecutable}`);
     }
@@ -275,7 +293,7 @@ function createWorkerAgent(config, options = {}) {
         writeJsonAtomic(runtimeStateFile, state);
     }
 
-    function startLoggedProcess(command, argumentsList, workingDirectory, logName) {
+    function startLoggedProcess(command, argumentsList, workingDirectory, logName, kind, slot) {
         const logPath = path.join(logName);
         ensureDirectory(path.dirname(logPath));
         const output = fs.createWriteStream(logPath, { flags: 'a' });
@@ -286,8 +304,29 @@ function createWorkerAgent(config, options = {}) {
             windowsHide: true,
             stdio: ['ignore', 'pipe', 'pipe']
         });
-        child.stdout.pipe(output, { end: false });
-        child.stderr.pipe(output, { end: false });
+        let stdoutBuffer = '';
+        child.stdout.on('data', (chunk) => {
+            output.write(chunk);
+            if (kind !== 'wilbur') {
+                return;
+            }
+            stdoutBuffer += chunk.toString();
+            const lines = stdoutBuffer.split(/\r?\n/);
+            stdoutBuffer = lines.pop() || '';
+            for (const line of lines) {
+                const cleanLine = line.replace(/\u001b\[[0-9;]*m/g, '').trim();
+                if (
+                    /New player connection|Player .* disconnected|New streamer connection|Streamer connected|Listening for streamer connections/.test(
+                        cleanLine
+                    )
+                ) {
+                    logger.log(
+                        `[worker] ${new Date().toISOString()} event=wilbur_event worker=${config.agentId} slot=${slot.config.id} message="${cleanLine}"`
+                    );
+                }
+            }
+        });
+        child.stderr.on('data', (chunk) => output.write(chunk));
         child.once('exit', () => output.end());
         return child;
     }
@@ -347,10 +386,27 @@ function createWorkerAgent(config, options = {}) {
                 fetchJson(`${baseUrl}/api/status`, 3_000),
                 fetchJson(`${baseUrl}/api/streamers`, 3_000)
             ]);
+            const previousPlayerCount = slot.playerCount;
+            const previousReady = slot.ready;
             slot.streamerCount = Number(status.streamer_count) || 0;
             slot.playerCount = Number(status.player_count) || 0;
             slot.ready = Array.isArray(streamers) && streamers.some((streamer) => streamer.streaming === true);
             slot.lastStatusAt = new Date().toISOString();
+            if (!previousReady && slot.ready) {
+                logSlotEvent(slot, 'streamer_ready', {
+                    streamers: slot.streamerCount
+                });
+            }
+            if (previousPlayerCount !== slot.playerCount) {
+                logSlotEvent(
+                    slot,
+                    slot.playerCount > 0 ? 'player_connected' : 'player_disconnected',
+                    {
+                        previousPlayers: previousPlayerCount,
+                        players: slot.playerCount
+                    }
+                );
+            }
             if (slot.ready && processIsRunning(slot.ueChild)) {
                 slot.status = 'ready';
             } else if (slot.status !== 'starting' && slot.status !== 'stopping') {
@@ -400,6 +456,9 @@ function createWorkerAgent(config, options = {}) {
     }
 
     async function stopProcesses(slot, finalStatus = 'stopped') {
+        logSlotEvent(slot, 'slot_stopping', {
+            finalStatus
+        });
         slot.intentionalStop = true;
         slot.status = 'stopping';
         slot.ready = false;
@@ -422,6 +481,9 @@ function createWorkerAgent(config, options = {}) {
         slot.startedAt = null;
         slot.intentionalStop = false;
         saveProcessState();
+        logSlotEvent(slot, finalStatus === 'failed' ? 'slot_cleanup_failed' : 'slot_stopped', {
+            finalStatus
+        });
     }
 
     function buildWilburArguments(slot) {
@@ -476,33 +538,55 @@ function createWorkerAgent(config, options = {}) {
         slot.ready = false;
         slot.startedAt = new Date().toISOString();
         saveProcessState();
+        logSlotEvent(slot, 'slot_starting', {
+            streamerPort: slot.config.streamerPort,
+            playerPort: slot.config.playerPort
+        });
 
         try {
             const wilburArguments = buildWilburArguments(slot);
+            logSlotEvent(slot, 'wilbur_starting');
             slot.wilburChild = startLoggedProcess(
                 nodeExecutable,
                 wilburArguments,
                 signallingDirectory,
-                path.join(slot.logDirectory, 'wilbur.log')
+                path.join(slot.logDirectory, 'wilbur.log'),
+                'wilbur',
+                slot
             );
             attachExitHandler(slot, 'wilbur', slot.wilburChild);
             await waitForSpawn(slot.wilburChild, 'Wilbur');
             await waitForWilburServer(slot);
+            logSlotEvent(slot, 'wilbur_ready', {
+                pid: slot.wilburChild.pid
+            });
 
+            logSlotEvent(slot, 'ue_starting', {
+                executable: gameExecutable
+            });
             slot.ueChild = startLoggedProcess(
                 gameExecutable,
                 buildUeArguments(slot),
                 gameWorkingDirectory,
-                path.join(slot.logDirectory, 'ue.log')
+                path.join(slot.logDirectory, 'ue.log'),
+                'ue',
+                slot
             );
             attachExitHandler(slot, 'ue', slot.ueChild);
             await waitForSpawn(slot.ueChild, 'Unreal Engine');
+            logSlotEvent(slot, 'ue_process_started', {
+                pid: slot.ueChild.pid
+            });
             await waitForStreamer(slot);
             slot.status = 'ready';
             saveProcessState();
+            logSlotEvent(slot, 'slot_ready');
         } catch (error) {
             slot.lastError = error.message;
             logger.error(`[${config.agentId}/${slot.config.id}] ${error.message}`);
+            logSlotEvent(slot, 'slot_start_failed', {
+                error: error.message
+            });
             await stopProcesses(slot, 'failed');
             throw error;
         }
@@ -623,6 +707,9 @@ function createWorkerAgent(config, options = {}) {
             }
 
             if (!isAuthorized(request)) {
+                logger.warn(
+                    `[worker] ${new Date().toISOString()} event=auth_rejected worker=${config.agentId} client=${getClientAddress(request)} method=${request.method} path=${url.pathname}`
+                );
                 sendJson(response, 401, { error: 'unauthorized' });
                 return;
             }
@@ -639,6 +726,9 @@ function createWorkerAgent(config, options = {}) {
             const startMatch = url.pathname.match(/^\/slots\/([^/]+)\/start$/);
             if (request.method === 'POST' && startMatch) {
                 const slotId = decodeURIComponent(startMatch[1]);
+                logger.log(
+                    `[worker] ${new Date().toISOString()} event=slot_start_request worker=${config.agentId} slot=${slotId} client=${getClientAddress(request)}`
+                );
                 await startSlot(slotId);
                 const slot = getSlot(slotId);
                 await refreshSlot(slot);
@@ -649,6 +739,9 @@ function createWorkerAgent(config, options = {}) {
             const stopMatch = url.pathname.match(/^\/slots\/([^/]+)\/stop$/);
             if ((request.method === 'POST' || request.method === 'DELETE') && stopMatch) {
                 const slotId = decodeURIComponent(stopMatch[1]);
+                logger.log(
+                    `[worker] ${new Date().toISOString()} event=slot_stop_request worker=${config.agentId} slot=${slotId} client=${getClientAddress(request)}`
+                );
                 await stopSlot(slotId);
                 sendJson(response, 200, serializeSlot(getSlot(slotId)));
                 return;
@@ -664,6 +757,9 @@ function createWorkerAgent(config, options = {}) {
 
             if (request.method === 'POST' && url.pathname === '/shutdown') {
                 await readJsonBody(request);
+                logger.log(
+                    `[worker] ${new Date().toISOString()} event=shutdown_request worker=${config.agentId} client=${getClientAddress(request)}`
+                );
                 sendJson(response, 202, { accepted: true });
                 setImmediate(() => void close(true));
                 return;

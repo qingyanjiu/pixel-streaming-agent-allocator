@@ -100,6 +100,24 @@ function createFakeAgent() {
     };
 }
 
+function createLogCapture() {
+    const lines = [];
+    return {
+        lines,
+        logger: {
+            log(message) {
+                lines.push(String(message));
+            },
+            warn(message) {
+                lines.push(String(message));
+            },
+            error(message) {
+                lines.push(String(message));
+            }
+        }
+    };
+}
+
 async function requestJson(url, options = {}) {
     const response = await fetch(url, options);
     const text = await response.text();
@@ -231,6 +249,7 @@ test('No-capacity responses can be retried with the same idempotency key', async
 test('Allocator reserves warm capacity, starts a cold slot, and releases disconnected sessions', async (t) => {
     const fakeAgent = createFakeAgent();
     const agentPort = await listen(fakeAgent.server);
+    const logCapture = createLogCapture();
     const allocator = createAllocator(
         {
             listenHost: '127.0.0.1',
@@ -251,13 +270,7 @@ test('Allocator reserves warm capacity, starts a cold slot, and releases disconn
                 }
             ]
         },
-        {
-            logger: {
-                log() {},
-                warn() {},
-                error() {}
-            }
-        }
+        { logger: logCapture.logger }
     );
 
     t.after(async () => {
@@ -308,6 +321,9 @@ test('Allocator reserves warm capacity, starts a cold slot, and releases disconn
     assert.equal(first.payload.slotId, 'T1');
     assert.equal(typeof first.payload.sessionToken, 'string');
     assert.ok(first.payload.sessionToken.length >= 32);
+    assert.ok(logCapture.lines.some((line) => line.includes('event=client_session_request')));
+    assert.ok(logCapture.lines.some((line) => line.includes('event=slot_assigned')));
+    assert.ok(logCapture.lines.some((line) => line.includes('to=ready')));
 
     const duplicate = await requestJson(`${baseUrl}/api/sessions`, {
         method: 'POST',
@@ -362,6 +378,11 @@ test('Allocator reserves warm capacity, starts a cold slot, and releases disconn
         headers: firstHeaders
     });
     assert.equal(active.payload.status, 'active');
+    assert.ok(
+        logCapture.lines.some(
+            (line) => line.includes('event=session_status') && line.includes('to=active')
+        )
+    );
 
     fakeAgent.setPlayerCount('T1', 0);
     const stored = allocator.sessions.get(first.payload.sessionId);
@@ -374,6 +395,7 @@ test('Allocator reserves warm capacity, starts a cold slot, and releases disconn
     assert.equal(disconnected.payload.url, first.payload.url);
     assert.match(disconnected.payload.message, /重连/);
     assert.ok(disconnected.payload.reconnectDeadline);
+    assert.ok(logCapture.lines.some((line) => line.includes('to=disconnected')));
 
     const newUserDuringGrace = await requestJson(`${baseUrl}/api/sessions`, {
         method: 'POST',
@@ -403,6 +425,7 @@ test('Allocator reserves warm capacity, starts a cold slot, and releases disconn
         { headers: firstHeaders }
     );
     assert.equal(reconnected.payload.status, 'active');
+    assert.ok(logCapture.lines.some((line) => line.includes('event=session_reconnected')));
 
     fakeAgent.setPlayerCount('T1', 0);
     await allocator.reconcileSessions();
@@ -416,6 +439,11 @@ test('Allocator reserves warm capacity, starts a cold slot, and releases disconn
     assert.equal(released.payload.status, 'released');
     assert.equal(released.payload.reason, 'reconnect_timeout');
     assert.equal(fakeAgent.slots.get('T1').status, 'stopped');
+    assert.equal(logCapture.lines.some((line) => line.includes(first.payload.sessionToken)), false);
+    assert.equal(
+        logCapture.lines.some((line) => line.includes('replace-with-a-long-random-client-api-key')),
+        false
+    );
 
     const unauthorized = await requestJson(`${baseUrl}/api/slots`);
     assert.equal(unauthorized.response.status, 401);

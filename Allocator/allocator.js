@@ -106,6 +106,40 @@ function createAllocator(config, options = {}) {
     let closed = false;
     let pollTimer = null;
 
+    function logEvent(event, fields = {}) {
+        const details = Object.entries(fields)
+            .filter(([, value]) => value !== undefined && value !== null && value !== '')
+            .map(([key, value]) => `${key}=${String(value).replace(/\s+/g, '_')}`)
+            .join(' ');
+        logger.log(`[allocator] ${new Date().toISOString()} event=${event}${details ? ` ${details}` : ''}`);
+    }
+
+    function getClientAddress(request) {
+        const forwarded = request.headers['x-forwarded-for'];
+        if (typeof forwarded === 'string' && forwarded.trim()) {
+            return forwarded.split(',')[0].trim();
+        }
+        return request.socket.remoteAddress || 'unknown';
+    }
+
+    function setSessionStatus(session, status, detail = {}) {
+        if (session.status === status) {
+            return;
+        }
+        const previous = session.status;
+        session.status = status;
+        session.updatedAt = Date.now();
+        logEvent('session_status', {
+            session: session.id,
+            from: previous,
+            to: status,
+            client: session.clientAddress,
+            worker: session.workerId,
+            slot: session.slotId,
+            reason: session.reason || detail.reason
+        });
+    }
+
     function workerHeaders(worker) {
         const headers = {};
         if (worker.token) {
@@ -133,16 +167,31 @@ function createAllocator(config, options = {}) {
     }
 
     async function refreshWorker(worker) {
+        const wasOnline = worker.online;
         try {
             const response = await workerRequest(worker, '/slots');
             worker.online = true;
             worker.lastSeenAt = new Date().toISOString();
             worker.lastError = null;
             worker.slots = Array.isArray(response.slots) ? response.slots : [];
+            if (!wasOnline) {
+                logEvent('worker_online', {
+                    worker: worker.id,
+                    address: worker.baseUrl,
+                    slots: worker.slots.length
+                });
+            }
         } catch (error) {
             worker.online = false;
             worker.lastError = error.message;
             worker.slots = [];
+            if (wasOnline) {
+                logEvent('worker_offline', {
+                    worker: worker.id,
+                    address: worker.baseUrl,
+                    error: error.message
+                });
+            }
         }
     }
 
@@ -263,7 +312,7 @@ function createAllocator(config, options = {}) {
         return response;
     }
 
-    function newSession(ttlSeconds) {
+    function newSession(ttlSeconds, requestContext = {}) {
         const now = Date.now();
         const ttl = Number(ttlSeconds) || settings.defaultTtlSeconds;
         return {
@@ -273,6 +322,8 @@ function createAllocator(config, options = {}) {
             workerId: null,
             slotId: null,
             url: null,
+            clientAddress: requestContext.clientAddress || null,
+            requestOrigin: requestContext.origin || null,
             createdAt: now,
             updatedAt: now,
             reservedAt: now,
@@ -309,8 +360,8 @@ function createAllocator(config, options = {}) {
     async function startSessionSlot(session) {
         const worker = workersById.get(session.workerId);
         if (!worker) {
-            session.status = 'failed';
             session.error = 'Selected worker no longer exists.';
+            setSessionStatus(session, 'failed', { reason: 'worker_missing' });
             releaseLease(session);
             return;
         }
@@ -330,14 +381,12 @@ function createAllocator(config, options = {}) {
             if (!slot || !slot.ready || !slot.running) {
                 throw new Error('Worker reported that the slot did not become ready.');
             }
-            session.status = 'ready';
             session.readyAt = Date.now();
-            session.updatedAt = Date.now();
+            setSessionStatus(session, 'ready', { reason: 'worker_ready' });
         } catch (error) {
             if (session.status !== 'released') {
-                session.status = 'failed';
                 session.error = error.message;
-                session.updatedAt = Date.now();
+                setSessionStatus(session, 'failed', { reason: 'worker_start_failed' });
             }
             releaseLease(session);
             try {
@@ -386,10 +435,9 @@ function createAllocator(config, options = {}) {
             return;
         }
         session.releasing = true;
-        session.status = 'released';
         session.reason = reason;
-        session.updatedAt = Date.now();
         session.releaseRequestedAt = Date.now();
+        setSessionStatus(session, 'released', { reason });
         try {
             if (stopSlot) {
                 await stopSessionSlot(session);
@@ -401,13 +449,24 @@ function createAllocator(config, options = {}) {
         }
     }
 
-    async function createSession(ttlSeconds, idempotencyKey) {
+    async function createSession(ttlSeconds, idempotencyKey, requestContext = {}) {
         if (idempotencyKey && idempotencyKeys.has(idempotencyKey)) {
-            return sessions.get(idempotencyKeys.get(idempotencyKey));
+            const existing = sessions.get(idempotencyKeys.get(idempotencyKey));
+            logEvent('session_request_reused', {
+                session: existing?.id,
+                client: requestContext.clientAddress
+            });
+            return existing;
         }
 
-        const session = newSession(ttlSeconds);
+        const session = newSession(ttlSeconds, requestContext);
         sessions.set(session.id, session);
+        logEvent('session_created', {
+            session: session.id,
+            client: session.clientAddress,
+            origin: session.requestOrigin,
+            ttlSeconds
+        });
         if (idempotencyKey) {
             idempotencyKeys.set(idempotencyKey, session.id);
         }
@@ -417,9 +476,15 @@ function createAllocator(config, options = {}) {
         const available = slots.find(slotCanServeNewClient);
         if (available) {
             claimSlot(session, available);
-            session.status = 'ready';
             session.readyAt = Date.now();
-            session.updatedAt = Date.now();
+            setSessionStatus(session, 'ready', { reason: 'hot_slot' });
+            logEvent('slot_assigned', {
+                session: session.id,
+                client: session.clientAddress,
+                worker: session.workerId,
+                slot: session.slotId,
+                mode: 'hot'
+            });
             return session;
         }
 
@@ -427,15 +492,25 @@ function createAllocator(config, options = {}) {
             const startable = slots.find(slotCanStart);
             if (startable) {
                 claimSlot(session, startable);
-                session.status = 'starting';
+                setSessionStatus(session, 'starting', { reason: 'cold_slot' });
+                logEvent('slot_assigned', {
+                    session: session.id,
+                    client: session.clientAddress,
+                    worker: session.workerId,
+                    slot: session.slotId,
+                    mode: 'cold'
+                });
                 setImmediate(() => void startSessionSlot(session));
                 return session;
             }
         }
 
-        session.status = 'no_capacity';
         session.reason = 'No free or startable Pixel Streaming slots are currently available.';
-        session.updatedAt = Date.now();
+        setSessionStatus(session, 'no_capacity', { reason: 'capacity_exhausted' });
+        logEvent('capacity_exhausted', {
+            session: session.id,
+            client: session.clientAddress
+        });
         releaseLease(session);
         if (idempotencyKey) {
             idempotencyKeys.delete(idempotencyKey);
@@ -456,8 +531,8 @@ function createAllocator(config, options = {}) {
             const slot = getSlot(session.workerId, session.slotId);
             if (!slot) {
                 if (session.status === 'starting' && session.updatedAt + settings.workerStartTimeoutMs < now) {
-                    session.status = 'failed';
                     session.error = 'Timed out waiting for the worker to report the slot.';
+                    setSessionStatus(session, 'failed', { reason: 'worker_report_timeout' });
                     releaseLease(session);
                 }
                 continue;
@@ -465,13 +540,12 @@ function createAllocator(config, options = {}) {
 
             if (session.status === 'starting') {
                 if (slot.ready && slot.running) {
-                    session.status = 'ready';
                     session.readyAt = now;
                     session.url = slot.publicUrl;
-                    session.updatedAt = now;
+                    setSessionStatus(session, 'ready', { reason: 'slot_ready' });
                 } else if (slot.status === 'failed') {
-                    session.status = 'failed';
                     session.error = slot.lastError || 'Selected slot failed to start.';
+                    setSessionStatus(session, 'failed', { reason: 'slot_failed' });
                     releaseLease(session);
                 }
                 continue;
@@ -479,11 +553,10 @@ function createAllocator(config, options = {}) {
 
             if (session.status === 'ready') {
                 if (Number(slot.playerCount) > 0) {
-                    session.status = 'active';
                     session.lastPlayerSeenAt = now;
                     session.disconnectedAt = null;
                     session.reconnectDeadline = null;
-                    session.updatedAt = now;
+                    setSessionStatus(session, 'active', { reason: 'player_connected' });
                 } else if (now - session.reservedAt > settings.connectTimeoutMs) {
                     await releaseSession(session, 'client_connect_timeout', true);
                 }
@@ -494,10 +567,14 @@ function createAllocator(config, options = {}) {
                 if (Number(slot.playerCount) > 0) {
                     session.lastPlayerSeenAt = now;
                 } else {
-                    session.status = 'disconnected';
                     session.disconnectedAt = now;
                     session.reconnectDeadline = now + settings.idleReleaseMs;
-                    session.updatedAt = now;
+                    setSessionStatus(session, 'disconnected', { reason: 'player_disconnected' });
+                    logEvent('reconnect_window_started', {
+                        session: session.id,
+                        client: session.clientAddress,
+                        deadline: new Date(session.reconnectDeadline).toISOString()
+                    });
                 }
                 if (now >= session.expiresAt) {
                     await releaseSession(session, 'session_expired', true);
@@ -507,11 +584,16 @@ function createAllocator(config, options = {}) {
 
             if (session.status === 'disconnected') {
                 if (Number(slot.playerCount) > 0) {
-                    session.status = 'active';
                     session.lastPlayerSeenAt = now;
                     session.disconnectedAt = null;
                     session.reconnectDeadline = null;
-                    session.updatedAt = now;
+                    setSessionStatus(session, 'active', { reason: 'player_reconnected' });
+                    logEvent('session_reconnected', {
+                        session: session.id,
+                        client: session.clientAddress,
+                        worker: session.workerId,
+                        slot: session.slotId
+                    });
                 } else if (now >= session.expiresAt) {
                     await releaseSession(session, 'session_expired', true);
                 } else if (now >= (session.reconnectDeadline || 0)) {
@@ -612,6 +694,7 @@ function createAllocator(config, options = {}) {
     const server = http.createServer(async (request, response) => {
         try {
             const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
+            const clientAddress = getClientAddress(request);
 
             if (!applyCors(request, response)) {
                 sendJson(response, 403, { error: 'origin_not_allowed' });
@@ -639,6 +722,9 @@ function createAllocator(config, options = {}) {
             }
 
             if (!isAuthorized(request)) {
+                logger.warn(
+                    `[allocator] ${new Date().toISOString()} event=auth_rejected client=${clientAddress} method=${request.method} path=${url.pathname}`
+                );
                 sendJson(response, 401, { error: 'unauthorized' });
                 return;
             }
@@ -662,15 +748,28 @@ function createAllocator(config, options = {}) {
 
             if (request.method === 'POST' && url.pathname === '/api/sessions') {
                 const body = await readJsonBody(request);
+                logEvent('client_session_request', {
+                    client: clientAddress,
+                    origin: request.headers.origin
+                });
                 const requestedTtl = Number(body.ttlSeconds) || settings.defaultTtlSeconds;
                 const ttlSeconds = Math.max(
                     settings.minTtlSeconds,
                     Math.min(settings.maxTtlSeconds, requestedTtl)
                 );
                 const idempotencyKey = request.headers['idempotency-key'] || null;
-                const session = await withAllocationLock(() => createSession(ttlSeconds, idempotencyKey));
+                const session = await withAllocationLock(() =>
+                    createSession(ttlSeconds, idempotencyKey, {
+                        clientAddress,
+                        origin: request.headers.origin || null
+                    })
+                );
 
                 if (session.status === 'no_capacity') {
+                    logEvent('client_session_rejected', {
+                        client: clientAddress,
+                        status: 'no_capacity'
+                    });
                     sendJson(
                         response,
                         503,
@@ -698,6 +797,10 @@ function createAllocator(config, options = {}) {
                 }
                 const sessionToken = request.headers['x-session-token'] || '';
                 if (!timingSafeEqual(sessionToken, session.sessionToken)) {
+                    logEvent('session_auth_rejected', {
+                        session: session.id,
+                        client: clientAddress
+                    });
                     sendJson(response, 401, { error: 'session_unauthorized' });
                     return;
                 }
@@ -713,9 +816,19 @@ function createAllocator(config, options = {}) {
                 }
                 const sessionToken = request.headers['x-session-token'] || '';
                 if (!timingSafeEqual(sessionToken, session.sessionToken)) {
+                    logEvent('session_auth_rejected', {
+                        session: session.id,
+                        client: clientAddress
+                    });
                     sendJson(response, 401, { error: 'session_unauthorized' });
                     return;
                 }
+                logEvent('client_release_request', {
+                    session: session.id,
+                    client: clientAddress,
+                    worker: session.workerId,
+                    slot: session.slotId
+                });
                 if (!['released', 'failed', 'no_capacity'].includes(session.status)) {
                     await withAllocationLock(() => releaseSession(session, 'client_requested', true));
                 }

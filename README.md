@@ -88,4 +88,5 @@ Worker\worker-template.json
 - [架构说明](Docs/架构说明.md)
 - [认证与密钥说明](Docs/认证与密钥说明.md)
 - [客户端连接像素流说明](Docs/客户端连接像素流说明.md)
+- [调试与日志说明](Docs/调试与日志说明.md)
 - [综合说明](Docs/综合说明.md)

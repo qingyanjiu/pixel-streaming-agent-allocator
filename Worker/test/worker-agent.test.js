@@ -41,6 +41,18 @@ test('Worker Agent starts, reports readiness, observes players, and stops one sl
     const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'ps-worker-agent-'));
     const fakeWilbur = path.join(__dirname, 'fixtures', 'fake-wilbur.js');
     const fakeUe = path.join(__dirname, 'fixtures', 'fake-ue.js');
+    const logLines = [];
+    const logger = {
+        log(message) {
+            logLines.push(String(message));
+        },
+        warn(message) {
+            logLines.push(String(message));
+        },
+        error(message) {
+            logLines.push(String(message));
+        }
+    };
     const config = {
         agentId: 'test-worker',
         listenHost: '127.0.0.1',
@@ -73,11 +85,7 @@ test('Worker Agent starts, reports readiness, observes players, and stops one sl
     assert.ok(fs.existsSync(fakeWilbur));
     const agent = createWorkerAgent(config, {
         configPath: path.join(temporaryDirectory, 'worker-test.json'),
-        logger: {
-            log() {},
-            warn() {},
-            error() {}
-        }
+        logger
     });
     t.after(async () => {
         await agent.close(true);
@@ -100,6 +108,9 @@ test('Worker Agent starts, reports readiness, observes players, and stops one sl
     assert.equal(started.playerCount, 0);
     assert.ok(started.pids.wilbur);
     assert.ok(started.pids.ue);
+    assert.ok(logLines.some((line) => line.includes('event=slot_start_request')));
+    assert.ok(logLines.some((line) => line.includes('event=slot_starting')));
+    assert.ok(logLines.some((line) => line.includes('event=slot_ready')));
 
     const playerResponse = await fetch(
         `http://127.0.0.1:${playerPort}/test/players?count=1`,
@@ -111,6 +122,19 @@ test('Worker Agent starts, reports readiness, observes players, and stops one sl
         { headers: authHeaders }
     );
     assert.equal(busy.playerCount, 1);
+    assert.ok(logLines.some((line) => line.includes('event=player_connected')));
+
+    const playerLeftResponse = await fetch(
+        `http://127.0.0.1:${playerPort}/test/players?count=0`,
+        { method: 'POST' }
+    );
+    assert.equal(playerLeftResponse.ok, true);
+    const idle = await requestJson(
+        `http://127.0.0.1:${agentPort}/slots/T1`,
+        { headers: authHeaders }
+    );
+    assert.equal(idle.playerCount, 0);
+    assert.ok(logLines.some((line) => line.includes('event=player_disconnected')));
 
     const stopped = await requestJson(
         `http://127.0.0.1:${agentPort}/slots/T1/stop`,
@@ -119,6 +143,7 @@ test('Worker Agent starts, reports readiness, observes players, and stops one sl
     assert.equal(stopped.status, 'stopped');
     assert.equal(stopped.running, false);
     assert.equal(stopped.playerCount, 0);
+    assert.ok(logLines.some((line) => line.includes('event=slot_stopped')));
 });
 
 test('Worker path resolution keeps Windows and WebServers directories independent', () => {
