@@ -1,14 +1,14 @@
 {
   "workers": [
     {
-      "id": "worker-01",
+      "id": "worker01",
       "baseUrl": "http://WORKER_01_IP:9101",
-      "token": "replace-with-worker-01-token"
+      "token": "replace-with-worker01-token"
     },
     {
-      "id": "worker-02",
+      "id": "worker02",
       "baseUrl": "http://WORKER_02_IP:9101",
-      "token": "replace-with-worker-02-token"
+      "token": "replace-with-worker02-token"
     }
   ]
 }

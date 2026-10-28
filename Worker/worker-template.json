@@ -1,5 +1,5 @@
 {
-  "agentId": "worker-01",
+  "agentId": "worker01",
   "listenHost": "0.0.0.0",
   "listenPort": 9101,
   "authToken": "replace-with-a-unique-worker-token",
@@ -40,7 +40,7 @@
   ],
   "slots": [
     {
-      "id": "W01-1",
+      "id": "slot01",
       "streamerPort": 8001,
       "playerPort": 801,
       "sfuPort": 9001,
@@ -52,7 +52,7 @@
       ]
     },
     {
-      "id": "W01-2",
+      "id": "slot02",
       "streamerPort": 8002,
       "playerPort": 802,
       "sfuPort": 9002,

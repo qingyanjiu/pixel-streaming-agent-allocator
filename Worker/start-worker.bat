@@ -8,7 +8,7 @@ set "NODE_EXE="
 
 if "%~1"=="" (
     echo Usage: start-worker.bat ^<worker-config.json^>
-    echo Example: start-worker.bat worker-01.json
+    echo Example: start-worker.bat worker01.json
     echo Config files are searched in "%SERVICE_DIR%" first.
     exit /b 1
 )

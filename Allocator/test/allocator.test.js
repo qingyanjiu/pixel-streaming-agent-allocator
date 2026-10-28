@@ -140,7 +140,7 @@ test('Allocator loads Worker addresses from a separate workers.json file', (t) =
         JSON.stringify({
             workers: [
                 {
-                    id: 'worker-01',
+                    id: 'worker01',
                     baseUrl: 'http://192.168.1.21:9101',
                     token: 'worker-token'
                 }
@@ -160,7 +160,7 @@ test('Allocator loads Worker addresses from a separate workers.json file', (t) =
     const loaded = loadAllocatorConfiguration(allocatorPath);
     assert.equal(loaded.workersFile, workersPath);
     assert.equal(loaded.config.workers.length, 1);
-    assert.equal(loaded.config.workers[0].id, 'worker-01');
+    assert.equal(loaded.config.workers[0].id, 'worker01');
     assert.equal(loaded.config.workers[0].baseUrl, 'http://192.168.1.21:9101');
 });
 
@@ -170,11 +170,11 @@ test('Allocator rejects duplicate Worker management addresses', () => {
             validateConfig({
                 workers: [
                     {
-                        id: 'worker-01',
+                        id: 'worker01',
                         baseUrl: 'http://192.168.1.21:9101'
                     },
                     {
-                        id: 'worker-02',
+                        id: 'worker02',
                         baseUrl: 'http://192.168.1.21:9101/'
                     }
                 ]

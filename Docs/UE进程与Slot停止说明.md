@@ -74,7 +74,7 @@ Slot 无法立即重新分配
 同时停止指定 Slot 的 UE 和 Wilbur：
 
 ```bat
-C:\UE_PIXEL_STREAMING_SERVER\Worker\stop-slot.bat W01-1
+C:\UE_PIXEL_STREAMING_SERVER\Worker\stop-slot.bat slot01
 ```
 
 这是单路维护和单路故障清理的推荐方式。
@@ -116,14 +116,14 @@ $state.slots | Select-Object id, status, playerCount, pids
 精确结束某个 Slot 的 UE：
 
 ```powershell
-$slot = $state.slots | Where-Object id -eq "W01-1"
+$slot = $state.slots | Where-Object id -eq "slot01"
 Stop-Process -Id $slot.pids.ue -Force
 ```
 
 完成应急处理后，应继续清理 Wilbur：
 
 ```bat
-C:\UE_PIXEL_STREAMING_SERVER\Worker\stop-slot.bat W01-1
+C:\UE_PIXEL_STREAMING_SERVER\Worker\stop-slot.bat slot01
 ```
 
 ## 6. 如何恢复被杀掉的 Slot
@@ -131,7 +131,7 @@ C:\UE_PIXEL_STREAMING_SERVER\Worker\stop-slot.bat W01-1
 先清理 Slot：
 
 ```bat
-stop-slot.bat W01-1
+stop-slot.bat slot01
 ```
 
 正常交给 Allocator 分配时，等待原 Session 租约释放后，下一次客户端申请会重新启动该 Slot。
@@ -141,7 +141,7 @@ stop-slot.bat W01-1
 ```powershell
 Invoke-RestMethod `
   -Method Post `
-  -Uri "http://127.0.0.1:$($config.listenPort)/slots/W01-1/start" `
+  -Uri "http://127.0.0.1:$($config.listenPort)/slots/slot01/start" `
   -Headers $headers `
   -TimeoutSec 200
 ```

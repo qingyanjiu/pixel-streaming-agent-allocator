@@ -57,7 +57,7 @@ set "PS_NODE_EXE=D:\Tools\node\node.exe"
 {
   "workers": [
     {
-      "id": "worker-01",
+      "id": "worker01",
       "baseUrl": "http://WORKER_01_IP:9101",
       "token": "WORKER_01_TOKEN"
     }
@@ -66,6 +66,9 @@ set "PS_NODE_EXE=D:\Tools\node\node.exe"
 ```
 
 `token` 必须与对应 Worker 的 `authToken` 一致。
+
+Worker ID 应使用 `worker01`、`worker02` 格式，并全局唯一。完整规则见
+[Worker 与 Slot 命名规范](../Docs/命名规范.md)。
 
 ## 启动
 

@@ -50,7 +50,7 @@ Worker\start-worker.bat worker01.json
 手动关闭一个 Slot：
 
 ```bat
-Worker\stop-slot.bat W01-1
+Worker\stop-slot.bat slot01
 ```
 
 关闭当前 Worker 的全部 Slot：
@@ -126,4 +126,5 @@ Worker\worker-template.json
 - [客户端连接像素流说明](Docs/客户端连接像素流说明.md)
 - [调试与日志说明](Docs/调试与日志说明.md)
 - [UE 进程与 Slot 停止说明](Docs/UE进程与Slot停止说明.md)
+- [Worker 与 Slot 命名规范](Docs/命名规范.md)
 - [综合说明](Docs/综合说明.md)

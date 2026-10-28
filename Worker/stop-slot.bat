@@ -6,8 +6,8 @@ set "SERVICE_DIR=%~dp0"
 
 if "%~1"=="" (
     echo Usage: stop-slot.bat ^<slotId^> [worker-config.json]
-    echo Example: stop-slot.bat W01-1
-    echo Example: stop-slot.bat W01-1 worker02.json
+    echo Example: stop-slot.bat slot01
+    echo Example: stop-slot.bat slot01 worker02.json
     exit /b 1
 )
 

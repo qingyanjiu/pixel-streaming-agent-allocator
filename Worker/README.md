@@ -46,7 +46,7 @@ npm ci
 ```powershell
 Copy-Item `
   "C:\UE_PIXEL_STREAMING_SERVER\Worker\worker-template.json" `
-  "C:\UE_PIXEL_STREAMING_SERVER\Worker\worker-01.json"
+  "C:\UE_PIXEL_STREAMING_SERVER\Worker\worker01.json"
 ```
 
 当前实际配置为 [worker01.json](worker01.json)。
@@ -55,7 +55,7 @@ Copy-Item `
 
 ```json
 {
-  "agentId": "worker-01",
+  "agentId": "worker01",
   "listenPort": 9101,
   "authToken": "WORKER_01_TOKEN",
   "windowsDirectory": "D:/YourGameBuild/Windows",
@@ -80,6 +80,9 @@ C:\UE_PIXEL_STREAMING_SERVER\Worker\logs
 - `sfuPort`
 - `publicUrl`
 
+Worker 和 Slot 统一使用 `worker01`、`slot01` 格式。Slot ID 只要求在同一个 Worker 内唯一，不同 Worker 可以都包含 `slot01`。完整规则见
+[Worker 与 Slot 命名规范](../Docs/命名规范.md)。
+
 ## 启动
 
 ```bat
@@ -95,7 +98,7 @@ start-worker.bat worker01
 也可以传入配置完整路径：
 
 ```bat
-start-worker.bat D:\WorkerConfigs\worker-07.json
+start-worker.bat D:\WorkerConfigs\worker07.json
 ```
 
 一个 Worker Agent 启动时不会立即拉起 UE。Allocator 分配 Slot 后才会启动 Wilbur 和 UE。
@@ -105,13 +108,13 @@ start-worker.bat D:\WorkerConfigs\worker-07.json
 关闭一个指定 Slot 的 UE 和 Wilbur，但保留 Worker Agent：
 
 ```bat
-C:\UE_PIXEL_STREAMING_SERVER\Worker\stop-slot.bat W01-1
+C:\UE_PIXEL_STREAMING_SERVER\Worker\stop-slot.bat slot01
 ```
 
 使用其他 Worker 配置：
 
 ```bat
-stop-slot.bat W07-1 worker07.json
+stop-slot.bat slot01 worker07.json
 ```
 
 关闭当前配置中的全部 Slot，但保留 Worker Agent：
