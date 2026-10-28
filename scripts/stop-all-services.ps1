@@ -62,6 +62,39 @@ function Get-ConfiguredSecret {
     return [string]$Value
 }
 
+function Stop-LocalAllocatorProcess {
+    param([string]$Url)
+
+    try {
+        $uri = [System.Uri]$Url
+    } catch {
+        return $false
+    }
+
+    if ($uri.Host -notin @('127.0.0.1', 'localhost', '::1')) {
+        return $false
+    }
+
+    $listener = Get-NetTCPConnection `
+        -State Listen `
+        -LocalPort $uri.Port `
+        -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if (-not $listener) {
+        return $false
+    }
+
+    $ownerProcessId = [int]$listener.OwningProcess
+    $process = Get-Process -Id $ownerProcessId -ErrorAction SilentlyContinue
+    if (-not $process -or $process.ProcessName -notlike 'node*') {
+        return $false
+    }
+
+    Stop-Process -Id $ownerProcessId -Force
+    Write-Host "[stop-all] Stopped local Allocator process pid=$ownerProcessId on port $($uri.Port)"
+    return $true
+}
+
 $workerResults = @()
 $workers = @($workerRegistry.workers)
 
@@ -148,8 +181,12 @@ if ($DryRun) {
         $allocatorStatus = 'shutdown_accepted'
         Write-Host "[stop-all] Allocator shutdown accepted: $AllocatorUrl"
     } catch {
-        $allocatorStatus = 'failed'
-        Write-Warning "[stop-all] Allocator could not be shut down: $($_.Exception.Message)"
+        Write-Warning "[stop-all] Allocator shutdown endpoint failed: $($_.Exception.Message)"
+        if (Stop-LocalAllocatorProcess -Url $AllocatorUrl) {
+            $allocatorStatus = 'process_stopped'
+        } else {
+            $allocatorStatus = 'failed'
+        }
     }
 }
 

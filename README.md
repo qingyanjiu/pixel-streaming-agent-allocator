@@ -67,6 +67,8 @@ stop-all.bat
 
 脚本会读取 `Allocator\config\workers.json`，默认要求输入 `YES` 确认。
 
+若当前运行的 Allocator 不支持 `/shutdown`，脚本会按本地监听端口结束对应的 Node 进程。
+
 自动化场景：
 
 ```bat
