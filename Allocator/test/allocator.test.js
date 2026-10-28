@@ -246,6 +246,100 @@ test('No-capacity responses can be retried with the same idempotency key', async
     assert.equal(retried.payload.status, 'ready');
 });
 
+test('Manual Worker Slot stop immediately releases the Allocator lease', async (t) => {
+    const fakeAgent = createFakeAgent();
+    const agentPort = await listen(fakeAgent.server);
+    const allocator = createAllocator(
+        {
+            listenHost: '127.0.0.1',
+            listenPort: 0,
+            apiKey: 'client-token',
+            autoStart: false,
+            stopOnRelease: true,
+            pollIntervalMs: 60_000,
+            connectTimeoutMs: 60_000,
+            idleReleaseMs: 60_000,
+            workers: [
+                {
+                    id: 'worker-test',
+                    baseUrl: `http://127.0.0.1:${agentPort}`,
+                    token: 'worker-token'
+                }
+            ]
+        },
+        {
+            logger: {
+                log() {},
+                warn() {},
+                error() {}
+            }
+        }
+    );
+
+    t.after(async () => {
+        await allocator.close();
+        await new Promise((resolve) => fakeAgent.server.close(resolve));
+    });
+
+    const address = await allocator.listen();
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const clientHeaders = {
+        'Content-Type': 'application/json',
+        'X-API-Key': 'client-token'
+    };
+
+    const allocation = await requestJson(`${baseUrl}/api/sessions`, {
+        method: 'POST',
+        headers: clientHeaders,
+        body: '{}'
+    });
+    assert.equal(allocation.response.status, 201);
+    assert.equal(allocation.payload.workerId, 'worker-test');
+    assert.equal(allocation.payload.slotId, 'T1');
+
+    fakeAgent.setPlayerCount('T1', 1);
+    await allocator.reconcileSessions();
+    assert.equal(
+        (
+            await requestJson(
+                `${baseUrl}/api/sessions/${allocation.payload.sessionId}`,
+                {
+                    headers: {
+                        ...clientHeaders,
+                        'X-Session-Token': allocation.payload.sessionToken
+                    }
+                }
+            )
+        ).payload.status,
+        'active'
+    );
+
+    await requestJson(`http://127.0.0.1:${agentPort}/slots/T1/stop`, {
+        method: 'POST',
+        headers: {
+            Authorization: 'Bearer worker-token'
+        }
+    });
+    await allocator.reconcileSessions();
+
+    const released = await requestJson(
+        `${baseUrl}/api/sessions/${allocation.payload.sessionId}`,
+        {
+            headers: {
+                ...clientHeaders,
+                'X-Session-Token': allocation.payload.sessionToken
+            }
+        }
+    );
+    assert.equal(released.payload.status, 'released');
+    assert.equal(released.payload.reason, 'worker_stopped');
+
+    const inventory = await requestJson(`${baseUrl}/api/slots`, {
+        headers: clientHeaders
+    });
+    assert.equal(inventory.payload.slots[0].leasedTo, null);
+});
+
 test('Allocator reserves warm capacity, starts a cold slot, and releases disconnected sessions', async (t) => {
     const fakeAgent = createFakeAgent();
     const agentPort = await listen(fakeAgent.server);

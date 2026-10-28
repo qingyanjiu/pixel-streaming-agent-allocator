@@ -542,6 +542,20 @@ function createAllocator(config, options = {}) {
                 continue;
             }
 
+            const slotTerminated =
+                slot.status === 'stopped' || slot.status === 'failed';
+            if (
+                slotTerminated &&
+                ['ready', 'active', 'disconnected'].includes(session.status)
+            ) {
+                await releaseSession(
+                    session,
+                    slot.status === 'failed' ? 'worker_failed' : 'worker_stopped',
+                    true
+                );
+                continue;
+            }
+
             if (session.status === 'starting') {
                 if (slot.ready && slot.running) {
                     session.readyAt = now;

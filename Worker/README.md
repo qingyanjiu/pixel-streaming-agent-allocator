@@ -127,7 +127,7 @@ Worker\stop-all-slots.bat
 
 脚本自动从 Worker 配置读取 `listenPort`、`authToken` 和 Slot 列表，不会在命令行明文传入 Token。
 
-如果 Slot 正在被 Allocator 分配，Agent 会停掉对应 UE/Wilbur，但 Allocator 中的 Session 可能先进入 `disconnected`，等待重连窗口结束后才完全释放。
+如果 Slot 正在被 Allocator 分配，Agent 停掉 UE/Wilbur 后，Allocator 会在下一次轮询中识别 `stopped` 状态并立即释放对应 Session 租约，不会等待 10 分钟重连窗口。
 
 直接结束 UE 进程与停止 Slot 的差异，以及异常恢复步骤，见
 [UE 进程与 Slot 停止说明](../Docs/UE进程与Slot停止说明.md)。

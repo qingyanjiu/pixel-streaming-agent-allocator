@@ -49,23 +49,21 @@ event=slot_failed
 
 直接结束 UE 后：
 
-1. Allocator 下一次轮询会看到 Slot 不再就绪。
-2. 新客户端不会分配到该 Slot。
-3. 原有 Session 可能先进入 `disconnected`。
-4. Session 和 Slot 租约会继续保留约 10 分钟，等待原客户端重连。
-5. 由于 UE 已经不存在，这段时间内实际无法恢复游戏画面。
-6. 租约释放后，Slot 才能重新分配给新会话。
+1. Worker 将 Slot 标记为 `failed`。
+2. Allocator 下一次轮询会看到 `failed/stopped` 终态。
+3. Allocator 立即释放对应 Session 租约，不进入 10 分钟重连等待。
+4. `stopOnRelease=true` 时，Allocator 会再次调用 Slot stop，清理残留 Wilbur。
+5. Slot 随后可以供新客户端重新申请。
 
 因此直接杀 UE 会同时造成：
 
 ```text
 UE 已停止
-Wilbur 还在
-Slot 无法立即重新分配
-原 Session 也无法真正重连
+Session 在下一个轮询周期释放
+默认配置下残留 Wilbur 会被清理
 ```
 
-这是不推荐的中间状态。
+虽然系统会自动收敛，但仍不推荐直接结束进程，因为会有短暂的不一致窗口，并且游戏状态会丢失。
 
 ## 4. 推荐停止方式
 
@@ -134,7 +132,7 @@ Worker\stop-slot.bat slot01
 stop-slot.bat slot01
 ```
 
-正常交给 Allocator 分配时，等待原 Session 租约释放后，下一次客户端申请会重新启动该 Slot。
+Slot 被手动停止或标记为失败后，Allocator 会在下一次轮询释放原 Session。下一次客户端申请可以重新启动该 Slot。
 
 如果维护人员需要立即恢复同一个 Slot，可以调用受保护的 Worker 接口：
 
@@ -153,7 +151,9 @@ Invoke-RestMethod `
 3. 重新启动 UE。
 4. 等待 Streamer 就绪后返回。
 
-如果原 Session 仍被分配器租用，立即启动不会自动解除 Session 租约。要提前释放，应由对应的客户端调用：
+如果维护人员提前直接调用了 Worker start，Allocator 可能还没有完成轮询。此时旧 Session 会在下一次轮询中被释放；需要继续使用新实例时，应重新申请 Session。
+
+客户端也可以主动立即释放旧 Session：
 
 ```http
 DELETE /api/sessions/{sessionId}
@@ -161,7 +161,7 @@ X-API-Key: <client-api-key>
 X-Session-Token: <sessionToken>
 ```
 
-否则需要等待 `idleReleaseMs`，当前默认为 10 分钟。
+旧 Session 的客户端不应继续使用原 Session Token 连接已经停止的 Slot。
 
 ## 7. 不要使用全局进程名清理
 

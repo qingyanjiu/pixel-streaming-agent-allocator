@@ -51,6 +51,7 @@ set "PS_NODE_EXE=node.exe"
 - `listenPort`：默认 `9200`。
 - `connectTimeoutMs`：实例就绪后等待首次连接的时间，默认 10 分钟。
 - `idleReleaseMs`：断线后等待同一 Session 重连的时间，默认 10 分钟。
+- Worker 报告 `stopped/failed` 时立即释放 Session，不等待重连窗口。
 - `workersFile`：Worker 清单路径，默认 `./config/workers.json`。
 
 修改 [config/workers.json](config/workers.json)：
