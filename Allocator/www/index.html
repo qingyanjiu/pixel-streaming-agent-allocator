@@ -12,7 +12,19 @@
     <div class="ambient ambient-a"></div>
     <div class="ambient ambient-b"></div>
 
-    <section class="auth-layer" id="authLayer" aria-labelledby="authTitle">
+    <section class="boot-layer" id="bootLayer" aria-live="polite">
+        <div class="boot-card">
+            <div class="brand-mark brand-mark-large" aria-hidden="true">
+                <span>PS</span>
+            </div>
+            <div class="boot-spinner" aria-hidden="true"></div>
+            <p class="eyebrow">SESSION VALIDATION</p>
+            <h1>Fleet Console</h1>
+            <p id="bootMessage">正在验证当前会话...</p>
+        </div>
+    </section>
+
+    <section class="auth-layer hidden" id="authLayer" aria-labelledby="authTitle">
         <form class="auth-card" id="authForm">
             <div class="brand-mark brand-mark-large" aria-hidden="true">
                 <span>PS</span>

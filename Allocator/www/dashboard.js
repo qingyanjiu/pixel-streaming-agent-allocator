@@ -5,6 +5,8 @@ const REFRESH_INTERVAL_MS = 3000;
 const REQUEST_TIMEOUT_MS = 20000;
 
 const elements = {
+    bootLayer: document.getElementById("bootLayer"),
+    bootMessage: document.getElementById("bootMessage"),
     authLayer: document.getElementById("authLayer"),
     authForm: document.getElementById("authForm"),
     authError: document.getElementById("authError"),
@@ -173,6 +175,7 @@ function showToast(message) {
 }
 
 function showAuth(message = "") {
+    elements.bootLayer.classList.add("hidden");
     elements.authLayer.classList.remove("hidden");
     elements.appShell.setAttribute("aria-hidden", "true");
     elements.authError.textContent = message;
@@ -180,8 +183,16 @@ function showAuth(message = "") {
 }
 
 function hideAuth() {
+    elements.bootLayer.classList.add("hidden");
     elements.authLayer.classList.add("hidden");
     elements.appShell.setAttribute("aria-hidden", "false");
+}
+
+function showBoot(message = "正在验证当前会话...") {
+    elements.bootMessage.textContent = message;
+    elements.bootLayer.classList.remove("hidden");
+    elements.authLayer.classList.add("hidden");
+    elements.appShell.setAttribute("aria-hidden", "true");
 }
 
 async function fetchSlots() {
@@ -456,7 +467,7 @@ function renderDashboard(data) {
     renderNotice(summary);
 }
 
-async function refreshDashboard({ silent = false } = {}) {
+async function refreshDashboard({ silent = false, fromForm = false } = {}) {
     if (!state.apiKey || state.loading) {
         return;
     }
@@ -484,7 +495,12 @@ async function refreshDashboard({ silent = false } = {}) {
                 ? "刷新超时：Worker 状态查询时间过长"
                 : `刷新失败：${error.message}`;
         setConnectionState("error", "连接异常");
-        if (!silent) {
+        if (fromForm) {
+            showAuth(message);
+        } else {
+            hideAuth();
+        }
+        if (!silent && !fromForm) {
             showToast(message);
         }
     } finally {
@@ -511,7 +527,7 @@ elements.authForm.addEventListener("submit", async (event) => {
     }
     state.apiKey = apiKey;
     elements.authError.textContent = "";
-    await refreshDashboard();
+    await refreshDashboard({ fromForm: true });
     if (elements.authLayer.classList.contains("hidden")) {
         sessionStorage.setItem(API_KEY_STORAGE, apiKey);
         elements.apiKey.value = "";
@@ -582,7 +598,8 @@ window.setInterval(() => {
 scheduleRefresh();
 
 if (state.apiKey) {
-    void refreshDashboard();
+    showBoot("正在验证已保存的会话...");
+    void refreshDashboard({ silent: true });
 } else {
     showAuth();
 }
