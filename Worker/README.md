@@ -91,9 +91,13 @@ Worker 和 Slot 统一使用 `worker01`、`slot01` 格式。Slot ID 只要求在
 
 ## 启动
 
+推荐先启动 Allocator，然后运行：
+
 ```bat
 Worker\start-worker.bat worker01.json
 ```
+
+脚本会在独立窗口自动启动同一台机器上的 Gateway，并把当前 Worker 配置传给 Gateway。
 
 配置省略 `.json` 也可以：
 
@@ -106,6 +110,20 @@ start-worker.bat worker01
 ```bat
 start-worker.bat Worker\worker07.json
 ```
+
+指定其他 Gateway 配置：
+
+```bat
+start-worker.bat worker07.json ..\Gateway\gateway-worker07.json
+```
+
+只启动 Worker，不启动 Gateway：
+
+```bat
+start-worker.bat worker07.json --no-gateway
+```
+
+也可以通过 `PS_GATEWAY_CONFIG` 设置默认 Gateway 配置路径。
 
 一个 Worker Agent 启动时不会立即拉起 UE。Allocator 分配 Slot 后才会启动 Wilbur 和 UE。
 

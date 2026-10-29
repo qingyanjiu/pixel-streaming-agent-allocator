@@ -95,7 +95,13 @@ allocatorTokenFile
 
 ## 启动
 
-先启动 Allocator 和 Worker Agent，再启动本机 Gateway：
+推荐启动命令是 Worker 启动脚本：
+
+```bat
+Worker\start-worker.bat worker01.json
+```
+
+它会在独立窗口自动执行 Gateway，并将当前 Worker 配置传给 Gateway。也可以单独启动：
 
 ```bat
 Gateway\start-gateway.bat
@@ -106,6 +112,14 @@ Gateway\start-gateway.bat
 ```bat
 Gateway\start-gateway.bat gateway-worker02.json
 ```
+
+单独启动时可以为 Gateway 覆盖 Worker 配置：
+
+```bat
+Gateway\start-gateway.bat gateway.json ..\Worker\worker02.json
+```
+
+命令行的 Worker 配置优先于 `gateway.json` 中的 `workerConfigFile`。
 
 启动后检查：
 

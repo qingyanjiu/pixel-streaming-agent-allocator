@@ -187,15 +187,20 @@ Wilbur 仍可只监听本机 HTTP/WS；客户端与 Gateway 之间使用 HTTPS/W
 
 启动顺序：
 
-1. 启动 Worker Agent。
-2. 启动 Allocator。
-3. 启动每台 Worker 的 Gateway。
+1. 启动 Allocator。
+2. 启动 Worker Agent；启动脚本会自动启动同机 Gateway。
+3. 在 Gateway 独立窗口检查监听和日志。
 4. 客户端申请 Session。
 
 ```bat
-Worker\start-worker.bat worker01.json
 Allocator\start-allocator.bat
-Gateway\start-gateway.bat
+Worker\start-worker.bat worker01.json
+```
+
+只启动 Worker：
+
+```bat
+Worker\start-worker.bat worker01.json --no-gateway
 ```
 
 停止单个 Gateway：

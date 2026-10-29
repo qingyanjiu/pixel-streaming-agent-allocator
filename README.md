@@ -49,8 +49,9 @@ Windows 游戏构建
 
 ```bat
 Worker\start-worker.bat worker01.json
-Gateway\start-gateway.bat
 ```
+
+`start-worker.bat` 会在独立窗口自动启动同机 Gateway。
 
 手动关闭一个 Slot：
 

@@ -221,6 +221,21 @@ test('Gateway loads Worker and Gateway settings from independent paths', (t) => 
         path.join(secretsDirectory, 'gateway-token.txt')
     );
     assert.equal(loaded.workerConfig.agentId, 'worker01');
+
+    const worker02Path = path.join(workerDirectory, 'worker02.json');
+    fs.writeFileSync(
+        worker02Path,
+        JSON.stringify({
+            agentId: 'worker02',
+            slots: [{ id: 'slot01', playerPort: 803 }]
+        })
+    );
+    const overridden = loadGatewayConfiguration(gatewayConfigPath, {
+        workerConfigFile: worker02Path
+    });
+    assert.equal(overridden.workerConfigPath, worker02Path);
+    assert.equal(overridden.workerConfig.agentId, 'worker02');
+
     const gateway = createGateway(loaded.config, loaded.workerConfig, {
         logger: createSilentLogger()
     });

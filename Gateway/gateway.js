@@ -35,12 +35,14 @@ const HOP_BY_HOP_HEADERS = new Set([
     'upgrade'
 ]);
 
-function loadGatewayConfiguration(configPath) {
+function loadGatewayConfiguration(configPath, overrides = {}) {
     const loaded = loadJson(configPath);
     const configDirectory = path.dirname(loaded.path);
     const config = { ...loaded.config };
     config.configDirectory = configDirectory;
-    config.workerConfigFile = resolveFrom(configDirectory, config.workerConfigFile);
+    config.workerConfigFile = overrides.workerConfigFile
+        ? path.resolve(overrides.workerConfigFile)
+        : resolveFrom(configDirectory, config.workerConfigFile);
     config.allocatorTokenFile = resolveFrom(configDirectory, config.allocatorTokenFile);
     config.tlsKeyFile = resolveFrom(configDirectory, config.tlsKeyFile);
     config.tlsCertFile = resolveFrom(configDirectory, config.tlsCertFile);
@@ -611,7 +613,9 @@ function createGateway(config, workerConfig, options = {}) {
 async function main() {
     const argumentsMap = parseArguments(process.argv.slice(2));
     const configFile = argumentsMap.config || path.join(__dirname, 'gateway.json');
-    const loaded = loadGatewayConfiguration(configFile);
+    const loaded = loadGatewayConfiguration(configFile, {
+        workerConfigFile: argumentsMap['worker-config']
+    });
     const gateway = createGateway(loaded.config, loaded.workerConfig, { logger: console });
     console.log(`[gateway] Worker config: ${loaded.workerConfigPath}`);
 
