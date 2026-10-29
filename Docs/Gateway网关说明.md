@@ -136,6 +136,7 @@ scripts\initialize-gateway-token.bat
 | `GET /play/<ticket>/` | 播放器首页 |
 | `GET /play/<ticket>/*` | 同 Slot 的静态资源和 REST 资源 |
 | `WS /play/<ticket>/ws` | 代理到本机 Wilbur 根 WebSocket |
+| `WS /play/<ticket>/` | 兼容直接把页面 URL 当信令 URL 的客户端 |
 | `POST /shutdown` | 使用 Gateway Token 停止 Gateway |
 
 根路径 `/` 返回 `404`。Gateway 没有登录页，也没有公开播放器页面。

@@ -16,6 +16,7 @@ Gateway 会：
 - 向 Allocator 查询该 Ticket 是否仍属于有效 Session。
 - 只允许访问当前 Worker 配置中声明过的 Slot。
 - 同时代理播放器 HTTP 资源和 WebSocket 升级。
+- 兼容把页面 URL 直接作为 WebSocket 地址的客户端。
 - Session 释放、Slot 停止或 Worker 不匹配后立即拒绝旧 URL。
 
 WebRTC 视频、音频和输入数据仍然由客户端直接连接 UE，不经过 Gateway。
@@ -123,6 +124,8 @@ http://WorkerIP:9300/health
 ```
 
 `9300/` 根路径不提供播放器页面，只接受带有效 Ticket 的 `/play/...` 路径。
+
+`/play/<ticket>/ws` 是标准信令路径。Gateway 也接受对 `/play/<ticket>/` 的 WebSocket Upgrade，并同样代理到本机 Wilbur 根 WebSocket，以兼容现有客户端。
 
 ## 防火墙
 

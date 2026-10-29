@@ -326,6 +326,11 @@ test('Gateway proxies HTTP and WebSocket only for a current local Session ticket
         `/play/${ticket}/ws`
     );
     assert.match(websocketResponse, /^HTTP\/1\.1 101 Switching Protocols/);
+    const compatibleWebsocketResponse = await requestWebSocket(
+        gatewayPort,
+        `/play/${ticket}/?ss=${encodeURIComponent(`ws://127.0.0.1:${gatewayPort}/play/${ticket}/ws`)}`
+    );
+    assert.match(compatibleWebsocketResponse, /^HTTP\/1\.1 101 Switching Protocols/);
 
     fakeAllocator.tickets.delete(ticket);
     const releasedHttp = await fetch(`${baseUrl}/play/${ticket}/`);
@@ -335,4 +340,9 @@ test('Gateway proxies HTTP and WebSocket only for a current local Session ticket
         `/play/${ticket}/ws`
     );
     assert.match(releasedWebSocket, /^HTTP\/1\.1 403 Forbidden/);
+    const releasedCompatibleWebSocket = await requestWebSocket(
+        gatewayPort,
+        `/play/${ticket}/?ss=test`
+    );
+    assert.match(releasedCompatibleWebSocket, /^HTTP\/1\.1 403 Forbidden/);
 });

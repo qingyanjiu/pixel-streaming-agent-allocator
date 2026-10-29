@@ -407,7 +407,7 @@ function createGateway(config, workerConfig, options = {}) {
         }
 
         const playRoute = parsePlayPath(url.pathname);
-        if (!playRoute || playRoute.relativePath !== '/ws') {
+        if (!playRoute || !['/', '/ws'].includes(playRoute.relativePath)) {
             sendSocketResponse(socket, 404, 'Not Found');
             return;
         }
