@@ -9,7 +9,8 @@ UE 5.8 Pixel Streaming 多机器按需分配系统。
 ```text
 项目根目录\
 ├── Allocator\    # 中央分配服务，可单独部署
-├── Worker\       # GPU 机器代理，可单独部署
+├── Worker\       # GPU 机器代理与进程管理，可单独部署
+├── Gateway\      # 与 Worker 同机部署的播放器和信令网关
 ├── Docs\         # 架构、启动、认证和前端文档
 └── WebServers\   # Worker 共享的 Wilbur 和播放器运行环境
 ```
@@ -39,6 +40,7 @@ Allocator\start-allocator.bat
 
 ```text
 Worker\
+Gateway\
 WebServers\
 Windows 游戏构建
 ```
@@ -47,6 +49,7 @@ Windows 游戏构建
 
 ```bat
 Worker\start-worker.bat worker01.json
+Gateway\start-gateway.bat
 ```
 
 手动关闭一个 Slot：
@@ -61,7 +64,7 @@ Worker\stop-slot.bat slot01
 Worker\stop-all-slots.bat
 ```
 
-停止所有 Worker Agent、全部 UE/Wilbur 和本地 Allocator：
+停止所有 Gateway、Worker Agent、全部 UE/Wilbur 和本地 Allocator：
 
 ```bat
 stop-all.bat
@@ -116,6 +119,12 @@ Worker\worker*.json
 Worker\worker-template.json
 ```
 
+Gateway 配置：
+
+```text
+Gateway\gateway.json
+```
+
 实际运行配置已提交到 Git；日志、证书、私钥和 `.env` 不提交。
 
 ## 文档
@@ -124,6 +133,7 @@ Worker\worker-template.json
 - [驾驶舱说明](Docs/驾驶舱说明.md)
 - [启动说明](Docs/启动说明.md)
 - [架构说明](Docs/架构说明.md)
+- [Gateway 网关说明](Docs/Gateway网关说明.md)
 - [认证与密钥说明](Docs/认证与密钥说明.md)
 - [客户端连接像素流说明](Docs/客户端连接像素流说明.md)
 - [调试与日志说明](Docs/调试与日志说明.md)

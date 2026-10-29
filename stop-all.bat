@@ -12,6 +12,7 @@ if /I "%~1"=="--what-if" set "DRY_RUN=-DryRun"
 if /I not "%~1"=="--force" if /I not "%~1"=="--what-if" (
     echo ============================================================
     echo WARNING: This will stop:
+    echo   - All Gateways listed in Allocator\config\workers.json
     echo   - All Worker Agents listed in Allocator\config\workers.json
     echo   - All UE and Wilbur instances managed by those Workers
     echo   - The local Allocator

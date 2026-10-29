@@ -3,6 +3,7 @@
   "listenPort": 9200,
   "nodeExecutable": "node.exe",
   "apiKey": "replace-with-a-long-random-client-api-key",
+  "gatewayToken": "replace-with-a-long-random-gateway-token",
   "pollIntervalMs": 2000,
   "workerRequestTimeoutMs": 5000,
   "workerStartTimeoutMs": 210000,

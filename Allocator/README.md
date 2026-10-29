@@ -1,6 +1,6 @@
 # Allocator 独立部署
 
-Allocator 是中央会话分配服务，负责管理 Worker 清单、申请 Session、冷启动实例、断线保留和超时回收。
+Allocator 是中央会话分配服务，负责管理 Worker 清单、申请 Session、冷启动实例、断线保留、超时回收和 Gateway Play Ticket 校验。
 
 除特别说明外，本文路径和命令都相对于项目根目录。
 
@@ -28,6 +28,7 @@ Allocator\
 
 - Node.js 18 或更高版本，推荐使用 Node.js 22。
 - 能够访问所有 Worker 的 TCP `9101`。
+- 能够向客户端返回各 Worker 的 Gateway 地址。
 - 允许客户端访问 TCP `9200`。
 
 `allocator.json` 默认使用：
@@ -47,6 +48,7 @@ set "PS_NODE_EXE=node.exe"
 修改 [allocator.json](allocator.json)：
 
 - `apiKey`：客户端访问 Allocator 使用的 Key。
+- `gatewayTokenFile`：Gateway 调用 Ticket 校验接口时使用的 Token 文件。
 - `corsAllowedOrigins`：允许直接访问的网页来源。
 - `listenPort`：默认 `9200`。
 - `connectTimeoutMs`：实例就绪后等待首次连接的时间，默认 10 分钟。
@@ -62,6 +64,7 @@ set "PS_NODE_EXE=node.exe"
     {
       "id": "worker01",
       "baseUrl": "http://WORKER01_IP:9101",
+      "gatewayUrl": "http://WORKER01_IP:9300",
       "token": "WORKER01_TOKEN"
     }
   ]
@@ -70,10 +73,18 @@ set "PS_NODE_EXE=node.exe"
 
 `token` 必须与对应 Worker 的 `authToken` 一致。
 
+`gatewayUrl` 是该 Worker 上 Gateway 的客户端访问地址。配置了 Gateway 时，返回的 Session `url` 不再直接使用 Slot 的 `publicUrl`。
+
 Worker ID 应使用 `worker01`、`worker02` 格式，并全局唯一。完整规则见
 [Worker 与 Slot 命名规范](../Docs/命名规范.md)。
 
 ## 启动
+
+首次部署先在项目根目录生成 Gateway Token：
+
+```bat
+scripts\initialize-gateway-token.bat
+```
 
 ```bat
 Allocator\start-allocator.bat

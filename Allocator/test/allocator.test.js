@@ -183,6 +183,109 @@ test('Allocator rejects duplicate Worker management addresses', () => {
     );
 });
 
+test('Allocator returns a Gateway URL and invalidates its ticket after release', async (t) => {
+    const fakeAgent = createFakeAgent();
+    const agentPort = await listen(fakeAgent.server);
+    const allocator = createAllocator(
+        {
+            listenHost: '127.0.0.1',
+            listenPort: 0,
+            apiKey: 'client-token',
+            gatewayToken: 'gateway-token',
+            autoStart: false,
+            stopOnRelease: true,
+            pollIntervalMs: 60_000,
+            workers: [
+                {
+                    id: 'worker-test',
+                    baseUrl: `http://127.0.0.1:${agentPort}`,
+                    gatewayUrl: 'http://gateway.test:9300',
+                    token: 'worker-token'
+                }
+            ]
+        },
+        {
+            logger: {
+                log() {},
+                warn() {},
+                error() {}
+            }
+        }
+    );
+
+    t.after(async () => {
+        await allocator.close();
+        await new Promise((resolve) => fakeAgent.server.close(resolve));
+    });
+
+    const address = await allocator.listen();
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const clientHeaders = {
+        'Content-Type': 'application/json',
+        'X-API-Key': 'client-token'
+    };
+    const allocation = await requestJson(`${baseUrl}/api/sessions`, {
+        method: 'POST',
+        headers: clientHeaders,
+        body: '{}'
+    });
+    assert.equal(allocation.response.status, 201);
+    assert.match(
+        allocation.payload.url,
+        /^http:\/\/gateway\.test:9300\/play\/[A-Za-z0-9_-]{32,128}\/\?ss=/
+    );
+
+    const playUrl = new URL(allocation.payload.url);
+    const ticket = playUrl.pathname.split('/')[2];
+    const signallingUrl = playUrl.searchParams.get('ss');
+    assert.match(
+        signallingUrl,
+        new RegExp(`^ws://gateway\\.test:9300/play/${ticket}/ws$`)
+    );
+
+    const validationHeaders = {
+        'Content-Type': 'application/json',
+        'X-Gateway-Token': 'gateway-token'
+    };
+    const validTicket = await requestJson(`${baseUrl}/api/gateway/validate`, {
+        method: 'POST',
+        headers: validationHeaders,
+        body: JSON.stringify({ ticket })
+    });
+    assert.equal(validTicket.response.status, 200);
+    assert.equal(validTicket.payload.valid, true);
+    assert.equal(validTicket.payload.workerId, 'worker-test');
+    assert.equal(validTicket.payload.slotId, 'T1');
+    const inventory = await requestJson(`${baseUrl}/api/slots`, {
+        headers: clientHeaders
+    });
+    assert.equal(inventory.payload.workers[0].gatewayUrl, 'http://gateway.test:9300');
+
+    const wrongGatewayToken = await requestJson(`${baseUrl}/api/gateway/validate`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Gateway-Token': 'wrong-gateway-token'
+        },
+        body: JSON.stringify({ ticket })
+    });
+    assert.equal(wrongGatewayToken.response.status, 401);
+
+    await requestJson(`${baseUrl}/api/sessions/${allocation.payload.sessionId}`, {
+        method: 'DELETE',
+        headers: {
+            ...clientHeaders,
+            'X-Session-Token': allocation.payload.sessionToken
+        }
+    });
+    const releasedTicket = await requestJson(`${baseUrl}/api/gateway/validate`, {
+        method: 'POST',
+        headers: validationHeaders,
+        body: JSON.stringify({ ticket })
+    });
+    assert.equal(releasedTicket.payload.valid, false);
+});
+
 test('No-capacity responses can be retried with the same idempotency key', async (t) => {
     const fakeAgent = createFakeAgent();
     const agentPort = await listen(fakeAgent.server);

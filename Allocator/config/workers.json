@@ -3,11 +3,13 @@
     {
       "id": "worker01",
       "baseUrl": "http://192.168.1.188:9101",
+      "gatewayUrl": "http://192.168.1.188:9300",
       "token": "replace-with-a-unique-worker-token"
     },
     {
       "id": "worker02",
       "baseUrl": "http://192.168.1.189:9101",
+      "gatewayUrl": "http://192.168.1.189:9300",
       "token": "replace-with-a-unique-worker-token"
     }
   ]

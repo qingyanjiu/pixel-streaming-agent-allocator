@@ -2,6 +2,8 @@
 
 Worker Agent 运行在每台 GPU 机器上，负责按 Slot 启动 Wilbur 和 UE，并上报就绪、Player 数量和进程状态。
 
+播放器访问由同一台机器上的 [Gateway](../Gateway/README.md) 统一代理。生产部署应阻止客户端直接访问远端 `801/802`。
+
 除特别说明外，本文路径和命令都相对于项目根目录。
 
 该目录可以单独部署到 Worker 机器，不需要复制 Allocator 源码。
@@ -81,6 +83,8 @@ Worker\logs
 - `playerPort`
 - `sfuPort`
 - `publicUrl`
+
+启用 Gateway 后，客户端使用 `Allocator/config/workers.json` 中的 `gatewayUrl`，不会直接打开 Slot 的 `publicUrl`。Gateway 从本 Worker 配置读取 `playerPort` 并建立本机端口白名单。
 
 Worker 和 Slot 统一使用 `worker01`、`slot01` 格式。Slot ID 只要求在同一个 Worker 内唯一，不同 Worker 可以都包含 `slot01`。完整规则见
 [Worker 与 Slot 命名规范](../Docs/命名规范.md)。

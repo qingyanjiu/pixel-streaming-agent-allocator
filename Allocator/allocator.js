@@ -40,6 +40,10 @@ function validateConfig(config) {
 
     const ids = new Set();
     const baseUrls = new Set();
+    const gatewayUrls = new Set();
+    const gatewayConfigured = Array.isArray(config.workers)
+        ? config.workers.some((worker) => !!worker.gatewayUrl)
+        : false;
     for (const worker of config.workers) {
         if (!worker.id || typeof worker.id !== 'string') {
             throw new Error('Every worker requires a non-empty id.');
@@ -58,6 +62,20 @@ function validateConfig(config) {
             );
         }
         baseUrls.add(normalizedBaseUrl);
+        if (gatewayConfigured && (!worker.gatewayUrl || !/^https?:\/\//i.test(worker.gatewayUrl))) {
+            throw new Error(
+                `Worker "${worker.id}" requires an http(s) gatewayUrl when any Worker uses a Gateway.`
+            );
+        }
+        if (worker.gatewayUrl) {
+            const normalizedGatewayUrl = worker.gatewayUrl.replace(/\/+$/, '').toLowerCase();
+            if (gatewayUrls.has(normalizedGatewayUrl)) {
+                throw new Error(
+                    `Worker "${worker.id}" duplicates gatewayUrl "${worker.gatewayUrl}".`
+                );
+            }
+            gatewayUrls.add(normalizedGatewayUrl);
+        }
     }
 }
 
@@ -78,6 +96,12 @@ function loadAllocatorConfiguration(configPath) {
         config.workers = workers;
         config.resolvedWorkersFile = workersFile;
     }
+    if (config.gatewayTokenFile) {
+        config.gatewayTokenFile = resolveFrom(
+            path.dirname(loaded.path),
+            config.gatewayTokenFile
+        );
+    }
 
     validateConfig(config);
     return {
@@ -92,11 +116,21 @@ function createAllocator(config, options = {}) {
     const settings = { ...DEFAULTS, ...config };
     const logger = options.logger || console;
     const apiKey = getSecret(settings.apiKey, settings.apiKeyEnv);
+    const gatewayToken = getSecret(
+        settings.gatewayToken,
+        settings.gatewayTokenEnv,
+        settings.gatewayTokenFile
+    );
+    const gatewayEnabled = settings.workers.some((worker) => !!worker.gatewayUrl);
+    if (gatewayEnabled && !gatewayToken) {
+        throw new Error('gatewayToken is required when Workers use a Gateway.');
+    }
     const dashboardDirectory = resolveFrom(__dirname, settings.dashboardDirectory);
     const workers = settings.workers.map((worker) => ({
         ...worker,
         token: getSecret(worker.token, worker.tokenEnv),
         baseUrl: worker.baseUrl.replace(/\/+$/, ''),
+        gatewayUrl: worker.gatewayUrl ? worker.gatewayUrl.replace(/\/+$/, '') : '',
         online: false,
         lastSeenAt: null,
         lastError: null,
@@ -104,6 +138,7 @@ function createAllocator(config, options = {}) {
     }));
     const workersById = new Map(workers.map((worker) => [worker.id, worker]));
     const sessions = new Map();
+    const playTickets = new Map();
     const idempotencyKeys = new Map();
     const slotLeases = new Map();
     let allocationTail = Promise.resolve();
@@ -322,6 +357,7 @@ function createAllocator(config, options = {}) {
         return {
             id: crypto.randomUUID(),
             sessionToken: crypto.randomBytes(32).toString('base64url'),
+            playTicket: crypto.randomBytes(32).toString('base64url'),
             status: 'allocating',
             workerId: null,
             slotId: null,
@@ -343,10 +379,34 @@ function createAllocator(config, options = {}) {
         };
     }
 
+    function deleteSession(session) {
+        playTickets.delete(session.playTicket);
+        sessions.delete(session.id);
+    }
+
+    function buildPlayUrl(session, worker) {
+        if (!worker.gatewayUrl) {
+            return session.publicUrl || null;
+        }
+
+        const gateway = new URL(worker.gatewayUrl);
+        const ticket = encodeURIComponent(session.playTicket);
+        const playPath = `/play/${ticket}/`;
+        const websocketProtocol = gateway.protocol === 'https:' ? 'wss:' : 'ws:';
+        const websocketUrl = `${websocketProtocol}//${gateway.host}/play/${ticket}/ws`;
+        gateway.pathname = `${gateway.pathname.replace(/\/+$/, '')}${playPath}`;
+        gateway.search = new URLSearchParams({ ss: websocketUrl }).toString();
+        gateway.hash = '';
+        return gateway.toString();
+    }
+
     function claimSlot(session, slot) {
+        const worker = workersById.get(slot.workerId);
         session.workerId = slot.workerId;
         session.slotId = slot.id;
-        session.url = slot.publicUrl;
+        session.publicUrl = slot.publicUrl;
+        session.url = buildPlayUrl(session, worker);
+        playTickets.set(session.playTicket, session.id);
         session.updatedAt = Date.now();
         slotLeases.set(slotKey(slot.workerId, slot.id), session.id);
     }
@@ -519,7 +579,7 @@ function createAllocator(config, options = {}) {
         if (idempotencyKey) {
             idempotencyKeys.delete(idempotencyKey);
         }
-        sessions.delete(session.id);
+        deleteSession(session);
         return session;
     }
 
@@ -559,7 +619,7 @@ function createAllocator(config, options = {}) {
             if (session.status === 'starting') {
                 if (slot.ready && slot.running) {
                     session.readyAt = now;
-                    session.url = slot.publicUrl;
+                    session.url = session.url || buildPlayUrl(session, workersById.get(session.workerId));
                     setSessionStatus(session, 'ready', { reason: 'slot_ready' });
                 } else if (slot.status === 'failed') {
                     session.error = slot.lastError || 'Selected slot failed to start.';
@@ -625,7 +685,7 @@ function createAllocator(config, options = {}) {
                 ['released', 'failed', 'no_capacity'].includes(session.status) &&
                 now - session.updatedAt > settings.sessionRetentionMs
             ) {
-                sessions.delete(sessionId);
+                deleteSession(session);
             }
         }
     }
@@ -723,6 +783,16 @@ function createAllocator(config, options = {}) {
         );
     }
 
+    function isGatewayAuthorized(request) {
+        if (!gatewayToken) {
+            return false;
+        }
+        return timingSafeEqual(
+            request.headers['x-gateway-token'] || '',
+            gatewayToken
+        );
+    }
+
     function applyCors(request, response) {
         const origin = request.headers.origin;
         if (!origin) {
@@ -791,6 +861,50 @@ function createAllocator(config, options = {}) {
                 return;
             }
 
+            if (request.method === 'POST' && url.pathname === '/api/gateway/validate') {
+                if (!isGatewayAuthorized(request)) {
+                    logEvent('gateway_auth_rejected', {
+                        client: clientAddress
+                    });
+                    sendJson(response, 401, { error: 'gateway_unauthorized' });
+                    return;
+                }
+                const body = await readJsonBody(request);
+                const ticket = typeof body.ticket === 'string' ? body.ticket : '';
+                const sessionId = playTickets.get(ticket);
+                const session = sessionId ? sessions.get(sessionId) : null;
+                const valid =
+                    !!session &&
+                    ['ready', 'active', 'disconnected'].includes(session.status);
+                if (!valid) {
+                    logEvent('play_ticket_rejected', {
+                        client: clientAddress,
+                        reason: 'invalid_or_inactive_session'
+                    });
+                    sendJson(response, 200, {
+                        valid: false,
+                        reason: 'invalid_or_inactive_session'
+                    });
+                    return;
+                }
+                logEvent('play_ticket_validated', {
+                    client: clientAddress,
+                    session: session.id,
+                    worker: session.workerId,
+                    slot: session.slotId,
+                    status: session.status
+                });
+                sendJson(response, 200, {
+                    valid: true,
+                    sessionId: session.id,
+                    workerId: session.workerId,
+                    slotId: session.slotId,
+                    status: session.status,
+                    expiresAt: new Date(session.expiresAt).toISOString()
+                });
+                return;
+            }
+
             if (!isAuthorized(request)) {
                 logger.warn(
                     `[allocator] ${new Date().toISOString()} event=auth_rejected client=${clientAddress} method=${request.method} path=${url.pathname}`
@@ -805,6 +919,7 @@ function createAllocator(config, options = {}) {
                     workers: workers.map((worker) => ({
                         id: worker.id,
                         baseUrl: worker.baseUrl,
+                        gatewayUrl: worker.gatewayUrl || null,
                         online: worker.online,
                         lastSeenAt: worker.lastSeenAt,
                         lastError: worker.lastError

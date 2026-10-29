@@ -74,9 +74,16 @@ function writeJsonAtomic(filePath, value) {
     fs.renameSync(temporaryPath, filePath);
 }
 
-function getSecret(configValue, environmentName) {
+function getSecret(configValue, environmentName, secretFile) {
     if (environmentName && process.env[environmentName]) {
         return process.env[environmentName];
+    }
+    if (secretFile) {
+        try {
+            return fs.readFileSync(secretFile, 'utf8').trim();
+        } catch (error) {
+            throw new Error(`Cannot read secret file "${secretFile}": ${error.message}`);
+        }
     }
     return typeof configValue === 'string' ? configValue : '';
 }

@@ -1,0 +1,11 @@
+{
+  "listenHost": "0.0.0.0",
+  "listenPort": 9300,
+  "workerConfigFile": "../Worker/worker01.json",
+  "allocatorUrl": "http://192.168.1.188:9200",
+  "allocatorTokenFile": "../secrets/gateway-token.txt",
+  "upstreamHost": "127.0.0.1",
+  "upstreamTimeoutMs": 30000,
+  "allocatorRequestTimeoutMs": 5000,
+  "nodeExecutable": "../WebServers/SignallingWebServer/platform_scripts/cmd/node/node.exe"
+}

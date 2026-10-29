@@ -50,13 +50,24 @@ $AllocatorUrl = $AllocatorUrl.TrimEnd('/')
 function Get-ConfiguredSecret {
     param(
         $Value,
-        [string]$EnvironmentName
+        [string]$EnvironmentName,
+        [string]$SecretFile
     )
 
     if (-not [string]::IsNullOrWhiteSpace($EnvironmentName)) {
         $environmentValue = [Environment]::GetEnvironmentVariable($EnvironmentName)
         if (-not [string]::IsNullOrWhiteSpace($environmentValue)) {
             return $environmentValue
+        }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($SecretFile)) {
+        $resolvedSecretFile = if ([System.IO.Path]::IsPathRooted($SecretFile)) {
+            $SecretFile
+        } else {
+            Join-Path $allocatorConfigDirectory $SecretFile
+        }
+        if (Test-Path -LiteralPath $resolvedSecretFile -PathType Leaf) {
+            return (Get-Content -LiteralPath $resolvedSecretFile -Raw -Encoding UTF8).Trim()
         }
     }
     return [string]$Value
@@ -96,11 +107,65 @@ function Stop-LocalAllocatorProcess {
 }
 
 $workerResults = @()
+$gatewayResults = @()
 $workers = @($workerRegistry.workers)
 
 Write-Host "[stop-all] Root: $rootDirectory"
 Write-Host "[stop-all] Worker registry: $WorkersFile"
 Write-Host "[stop-all] Workers: $($workers.Count)"
+
+$gatewayToken = Get-ConfiguredSecret `
+    -Value $allocator.gatewayToken `
+    -EnvironmentName ([string]$allocator.gatewayTokenEnv) `
+    -SecretFile ([string]$allocator.gatewayTokenFile)
+
+foreach ($worker in $workers) {
+    $gatewayUrl = ([string]$worker.gatewayUrl).TrimEnd('/')
+    if ([string]::IsNullOrWhiteSpace($gatewayUrl)) {
+        continue
+    }
+
+    if ($DryRun) {
+        Write-Host "[stop-all] Would shut down Gateway worker=$($worker.id) url=$gatewayUrl"
+        $gatewayResults += [pscustomobject]@{
+            Worker = $worker.id
+            Url = $gatewayUrl
+            Status = 'would_shutdown'
+            Error = $null
+        }
+        continue
+    }
+
+    try {
+        $gatewayHeaders = @{}
+        if (-not [string]::IsNullOrWhiteSpace($gatewayToken)) {
+            $gatewayHeaders['X-Gateway-Token'] = $gatewayToken
+        }
+        Invoke-RestMethod `
+            -Uri "$gatewayUrl/shutdown" `
+            -Headers $gatewayHeaders `
+            -Method Post `
+            -ContentType 'application/json' `
+            -Body '{}' `
+            -TimeoutSec 15 | Out-Null
+        Write-Host "[stop-all] Gateway shutdown accepted: worker=$($worker.id) url=$gatewayUrl"
+        $gatewayResults += [pscustomobject]@{
+            Worker = $worker.id
+            Url = $gatewayUrl
+            Status = 'shutdown_accepted'
+            Error = $null
+        }
+    } catch {
+        $errorMessage = $_.Exception.Message
+        Write-Warning "[stop-all] Gateway worker=$($worker.id) could not be shut down: $errorMessage"
+        $gatewayResults += [pscustomobject]@{
+            Worker = $worker.id
+            Url = $gatewayUrl
+            Status = 'failed'
+            Error = $errorMessage
+        }
+    }
+}
 
 foreach ($worker in $workers) {
     $workerUrl = ([string]$worker.baseUrl).TrimEnd('/')
@@ -190,12 +255,14 @@ if ($DryRun) {
     }
 }
 
+$gatewayResults | Format-Table Worker, Url, Status, Error -AutoSize
 $workerResults | Format-Table Worker, Url, Status, RunningSlots, Error -AutoSize
-Write-Host "[stop-all] Summary: workers=$($workers.Count), failed=$(@($workerResults | Where-Object Status -eq 'failed').Count), allocator=$allocatorStatus"
+Write-Host "[stop-all] Summary: gateways=$($gatewayResults.Count), gatewayFailed=$(@($gatewayResults | Where-Object Status -eq 'failed').Count), workers=$($workers.Count), workerFailed=$(@($workerResults | Where-Object Status -eq 'failed').Count), allocator=$allocatorStatus"
 
+$failedGateways = @($gatewayResults | Where-Object Status -eq 'failed').Count
 $failedWorkers = @($workerResults | Where-Object Status -eq 'failed').Count
 $allocatorFailed = $allocatorStatus -eq 'failed'
-if ($failedWorkers -gt 0 -or $allocatorFailed) {
+if ($failedGateways -gt 0 -or $failedWorkers -gt 0 -or $allocatorFailed) {
     exit 1
 }
 exit 0

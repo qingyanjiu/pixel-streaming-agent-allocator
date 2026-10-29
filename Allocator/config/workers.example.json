@@ -3,11 +3,13 @@
     {
       "id": "worker01",
       "baseUrl": "http://WORKER01_IP:9101",
+      "gatewayUrl": "http://WORKER01_IP:9300",
       "token": "replace-with-worker01-token"
     },
     {
       "id": "worker02",
       "baseUrl": "http://WORKER02_IP:9101",
+      "gatewayUrl": "http://WORKER02_IP:9300",
       "token": "replace-with-worker02-token"
     }
   ]
