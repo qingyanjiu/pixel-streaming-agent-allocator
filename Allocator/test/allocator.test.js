@@ -579,7 +579,7 @@ test('Allocator reserves warm capacity, starts a cold slot, and releases disconn
     assert.match(dashboardHtml, /未预约且未连接的正常线路数量/);
     assert.match(dashboardHtml, /class="metric-label">已连接/);
     assert.match(dashboardHtml, /已有用户连接的线路数量/);
-    assert.match(dashboardHtml, /class="metric-label">已预约/);
+    assert.match(dashboardHtml, /class="metric-label">已预约资源/);
     assert.doesNotMatch(dashboardHtml, /活跃 Player/);
     assert.match(dashboardHtml, /已预约客户/);
     assert.match(dashboardHtml, /id="reservedList"/);
