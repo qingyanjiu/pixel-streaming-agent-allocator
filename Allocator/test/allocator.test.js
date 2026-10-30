@@ -618,6 +618,7 @@ test('Allocator reserves warm capacity, starts a cold slot, and releases disconn
     assert.match(dashboardScriptText, /releaseReservation/);
     assert.match(dashboardScriptText, /updateReservationCountdowns/);
     assert.match(dashboardScriptText, /客户 IP/);
+    assert.match(dashboardScriptText, /isReservation && leaseDeadline/);
     const fetchSlotsSource = dashboardScriptText.slice(
         dashboardScriptText.indexOf("async function fetchSlots"),
         dashboardScriptText.indexOf("function calculateSummary")

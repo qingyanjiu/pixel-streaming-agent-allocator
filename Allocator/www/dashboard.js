@@ -486,9 +486,9 @@ function renderSlots(summary) {
                 <div class="reservation-summary">
                     <span>客户 IP <strong class="mono">${escapeHtml(slot.lease.clientAddress || "未知")}</strong></span>
                     ${
-                        leaseDeadline
+                        isReservation && leaseDeadline
                             ? `<span>剩余 <strong class="reserved-time" data-deadline="${escapeHtml(leaseDeadline)}">${escapeHtml(formatRemaining(leaseDeadline))}</strong></span>`
-                            : '<span>连接期间不自动关闭</span>'
+                            : ''
                     }
                 </div>
             `
