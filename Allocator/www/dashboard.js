@@ -26,7 +26,6 @@ const elements = {
     statTotal: document.getElementById("statTotal"),
     statAvailable: document.getElementById("statAvailable"),
     statPlayers: document.getElementById("statPlayers"),
-    statPlayersFoot: document.getElementById("statPlayersFoot"),
     statLeased: document.getElementById("statLeased"),
     noticeBanner: document.getElementById("noticeBanner"),
     workerSummary: document.getElementById("workerSummary"),
@@ -435,10 +434,6 @@ function renderDashboard(data) {
     elements.statTotal.textContent = summary.total;
     elements.statAvailable.textContent = summary.available;
     elements.statPlayers.textContent = summary.inUse;
-    elements.statPlayersFoot.textContent =
-        summary.inUse > 0
-            ? `${summary.players} 位用户正在使用`
-            : "当前没有用户连接";
     elements.statLeased.textContent = summary.leased;
     elements.onlineWorkers.textContent = `${summary.onlineWorkers} / ${summary.workers.length}`;
     elements.totalSlots.textContent = summary.total;
