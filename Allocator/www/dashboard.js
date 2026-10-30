@@ -118,13 +118,13 @@ function formatRelative(value) {
     return `${Math.floor(elapsed / 3600000)} 小时前`;
 }
 
-function workerHostAddress(worker, slot) {
+function workerHostIp(worker, slot) {
     for (const value of [worker?.baseUrl, slot.publicUrl]) {
         if (!value) {
             continue;
         }
         try {
-            return new URL(value).host;
+            return new URL(value).hostname;
         } catch {
             // Fall through to a readable raw value.
         }
@@ -520,8 +520,8 @@ function renderSlots(summary) {
 
         const row = document.createElement("tr");
         row.innerHTML = `
+            <td><span class="mono" title="${escapeHtml(slot.workerId)}">${escapeHtml(workerHostIp(worker, slot))}</span></td>
             <td><span class="slot-name">${escapeHtml(slot.id)}</span></td>
-            <td><span class="mono" title="${escapeHtml(slot.workerId)}">${escapeHtml(workerHostAddress(worker, slot))}</span></td>
             <td><span class="status-badge ${statusClass(status)}">${escapeHtml(statusLabel(status))}</span></td>
             <td>
                 <span class="player-meter">
