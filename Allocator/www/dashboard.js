@@ -118,6 +118,20 @@ function formatRelative(value) {
     return `${Math.floor(elapsed / 3600000)} 小时前`;
 }
 
+function workerHostAddress(worker, slot) {
+    for (const value of [worker?.baseUrl, slot.publicUrl]) {
+        if (!value) {
+            continue;
+        }
+        try {
+            return new URL(value).host;
+        } catch {
+            // Fall through to a readable raw value.
+        }
+    }
+    return worker?.id || slot.workerId;
+}
+
 function normalizedStatus(slot) {
     if (slot.status === "starting" || slot.status === "stopping") {
         return slot.status;
@@ -507,7 +521,7 @@ function renderSlots(summary) {
         const row = document.createElement("tr");
         row.innerHTML = `
             <td><span class="slot-name">${escapeHtml(slot.id)}</span></td>
-            <td>${escapeHtml(slot.workerId)}</td>
+            <td><span class="mono" title="${escapeHtml(slot.workerId)}">${escapeHtml(workerHostAddress(worker, slot))}</span></td>
             <td><span class="status-badge ${statusClass(status)}">${escapeHtml(statusLabel(status))}</span></td>
             <td>
                 <span class="player-meter">
