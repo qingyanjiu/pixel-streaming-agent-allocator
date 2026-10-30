@@ -222,22 +222,24 @@ function calculateSummary(data) {
     const onlineWorkerIds = new Set(
         workers.filter((worker) => worker.online).map((worker) => worker.id)
     );
-    let availableHot = 0;
+    let available = 0;
     let inUse = 0;
     let unavailableSlots = 0;
     let leased = 0;
 
     for (const slot of slots) {
+        const playerCount = Number(slot.playerCount) || 0;
         if (slot.leasedTo) {
             leased += 1;
+        }
+        if (!slot.leasedTo && playerCount === 0) {
+            available += 1;
         }
         const workerOnline = onlineWorkerIds.has(slot.workerId);
         if (!workerOnline || slot.status === "failed") {
             unavailableSlots += 1;
-        } else if (Number(slot.playerCount) > 0 || slot.leasedTo) {
+        } else if (playerCount > 0 || slot.leasedTo) {
             inUse += 1;
-        } else if (slot.ready) {
-            availableHot += 1;
         } else {
             if (!["starting", "stopping", "stopped"].includes(slot.status)) {
                 unavailableSlots += 1;
@@ -250,7 +252,7 @@ function calculateSummary(data) {
         slots,
         workers,
         total: slots.length,
-        availableHot,
+        available,
         leased,
         inUse,
         players,
@@ -268,8 +270,7 @@ function renderWorkers(summary) {
     for (const worker of summary.workers) {
         const workerSlots = summary.slots.filter((slot) => slot.workerId === worker.id);
         const availableSlots = workerSlots.filter(
-            (slot) =>
-                slot.ready && Number(slot.playerCount) === 0 && !slot.leasedTo
+            (slot) => Number(slot.playerCount) === 0 && !slot.leasedTo
         ).length;
         const players = workerSlots.reduce(
             (sum, slot) => sum + (Number(slot.playerCount) || 0),
@@ -315,7 +316,10 @@ function renderWorkers(summary) {
 function slotMatches(slot) {
     const worker = state.workerById.get(slot.workerId);
     const status = worker && worker.online === false ? "offline" : normalizedStatus(slot);
-    if (state.slotStatus === "available" && status !== "ready") {
+    if (
+        state.slotStatus === "available" &&
+        (slot.leasedTo || Number(slot.playerCount) > 0)
+    ) {
         return false;
     }
     if (state.slotStatus === "busy" && status !== "busy") {
@@ -425,7 +429,7 @@ function renderDashboard(data) {
     state.lastUpdatedAt = new Date();
 
     elements.statTotal.textContent = summary.total;
-    elements.statAvailable.textContent = summary.availableHot;
+    elements.statAvailable.textContent = summary.available;
     elements.statPlayers.textContent = summary.players;
     elements.statPlayersFoot.textContent =
         summary.players > 0
