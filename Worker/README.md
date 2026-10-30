@@ -8,6 +8,8 @@ Worker Agent 运行在每台 GPU 机器上，负责按 Slot 启动 Wilbur 和 UE
 
 该目录可以单独部署到 Worker 机器，不需要复制 Allocator 源码。
 
+完整的多机器部署步骤见 [部署文档](../Docs/部署文档.md)。
+
 ## 目录内容
 
 ```text

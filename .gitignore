@@ -12,7 +12,6 @@ coverage/
 # Local environment and credentials
 .env
 .env.*
-secrets/
 *.pem
 *.key
 *.pfx

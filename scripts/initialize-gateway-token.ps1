@@ -9,9 +9,13 @@ if ([string]::IsNullOrWhiteSpace($OutputFile)) {
 }
 $OutputFile = [System.IO.Path]::GetFullPath($OutputFile)
 
+$placeholder = 'replace-with-a-long-random-gateway-token'
 if (Test-Path -LiteralPath $OutputFile -PathType Leaf) {
-    Write-Host "[secrets] Gateway token already exists; it was not changed."
-    exit 0
+    $existingToken = (Get-Content -LiteralPath $OutputFile -Raw -Encoding UTF8).Trim()
+    if ($existingToken -ne $placeholder) {
+        Write-Host "[secrets] Gateway token already exists; it was not changed."
+        exit 0
+    }
 }
 
 $secretsDirectory = Split-Path -Parent $OutputFile
@@ -35,4 +39,4 @@ $token = [Convert]::ToBase64String($bytes).
     [System.Text.UTF8Encoding]::new($false)
 )
 Write-Host "[secrets] Generated Gateway token: $OutputFile"
-Write-Warning 'Copy this file securely to every Gateway and the Allocator; never commit it.'
+Write-Host '[secrets] Copy the same file to every Gateway and the Allocator.'

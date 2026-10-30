@@ -4,6 +4,8 @@ Gateway 与 Windows 游戏构建、WebServers 和 Worker Agent 部署在同一�
 
 完整架构和安全边界见 [Gateway 网关说明](../Docs/Gateway网关说明.md)。
 
+多台机器的完整安装步骤见 [部署文档](../Docs/部署文档.md)。
+
 ## 职责
 
 ```text
@@ -81,7 +83,7 @@ scripts\initialize-gateway-token.bat
 secrets/gateway-token.txt
 ```
 
-该目录已被 `.gitignore` 忽略。Allocator 和每台 Gateway 必须使用完全相同的 Token 文件内容。多机部署时通过受控运维通道复制，不要通过聊天、Git 或公开链接传递。
+仓库中提交的是占位值，部署时运行生成脚本或手工替换。Allocator 和每台 Gateway 必须使用完全相同的实际 Token 文件内容；多台机器部署时应复制同一份文件。
 
 也可以在配置中使用：
 

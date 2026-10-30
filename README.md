@@ -126,7 +126,7 @@ Gateway 配置：
 Gateway\gateway.json
 ```
 
-实际运行配置已提交到 Git；日志、证书、私钥和 `.env` 不提交。
+实际运行配置和 Gateway Token 占位文件已提交到 Git；部署时修改 Token。日志、TLS 私钥和 `.env` 不提交。
 
 ## 文档
 
@@ -135,6 +135,7 @@ Gateway\gateway.json
 - [启动说明](Docs/启动说明.md)
 - [架构说明](Docs/架构说明.md)
 - [Gateway 网关说明](Docs/Gateway网关说明.md)
+- [完整部署文档](Docs/部署文档.md)
 - [认证与密钥说明](Docs/认证与密钥说明.md)
 - [客户端连接像素流说明](Docs/客户端连接像素流说明.md)
 - [调试与日志说明](Docs/调试与日志说明.md)
