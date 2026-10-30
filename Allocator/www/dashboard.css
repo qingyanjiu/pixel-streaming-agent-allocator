@@ -639,7 +639,6 @@ button {
     gap: 18px;
 }
 
-.reservation-panel,
 .worker-panel,
 .distribution-panel,
 .slot-panel {
@@ -852,48 +851,16 @@ tbody tr:last-child td {
     font-variant-numeric: tabular-nums;
 }
 
-.reserved-list {
+.reservation-summary {
     display: flex;
-    flex-direction: column;
-    gap: 10px;
+    flex-wrap: wrap;
+    gap: 7px 16px;
+    color: var(--muted);
+    font-size: 10px;
 }
 
-.reserved-item {
-    display: grid;
-    grid-template-columns: minmax(180px, 1.2fr) minmax(150px, 0.8fr) minmax(130px, 0.7fr) auto;
-    align-items: center;
-    gap: 18px;
-    padding: 15px 16px;
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    background: rgba(6, 16, 27, 0.42);
-}
-
-.reserved-resource,
-.reserved-detail {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-.reserved-resource {
-    align-items: flex-start;
-}
-
-.reserved-resource strong {
-    color: var(--text);
-    font-size: 13px;
-}
-
-.reserved-detail span {
-    color: var(--faint);
-    font-size: 9px;
-    letter-spacing: 0.1em;
-}
-
-.reserved-detail strong {
-    color: #d3e2ee;
-    font-size: 12px;
+.reservation-summary strong {
+    color: #d8e5ef;
     font-weight: 500;
 }
 
@@ -926,6 +893,10 @@ tbody tr:last-child td {
     cursor: wait;
     opacity: 0.6;
     transform: none;
+}
+
+.action-cell {
+    width: 118px;
 }
 
 .slot-actions {
@@ -1202,20 +1173,10 @@ tbody tr:last-child td {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .reservation-panel,
     .worker-panel,
     .distribution-panel,
     .slot-panel {
         padding: 18px;
-    }
-
-    .reserved-item {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 14px;
-    }
-
-    .release-button {
-        grid-column: 1 / -1;
     }
 
     .slot-heading,

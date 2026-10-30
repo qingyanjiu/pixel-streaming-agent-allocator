@@ -140,18 +140,6 @@
                 </article>
             </section>
 
-            <section class="panel reservation-panel" aria-labelledby="reservationTitle">
-                <div class="panel-heading">
-                    <div>
-                        <p class="eyebrow">客户预约</p>
-                        <h2 id="reservationTitle">已预约客户</h2>
-                    </div>
-                    <span class="panel-count" id="reservedSummary">0 条</span>
-                </div>
-                <div class="reserved-list" id="reservedList"></div>
-                <div class="empty-state" id="reservedEmpty">当前没有已预约客户</div>
-            </section>
-
             <section class="overview-grid">
                 <article class="panel worker-panel">
                     <div class="panel-heading">
@@ -203,7 +191,7 @@
                         <button class="filter-button active" type="button" data-status="all">全部</button>
                         <button class="filter-button" type="button" data-status="available">可用</button>
                         <button class="filter-button" type="button" data-status="busy">使用中</button>
-                        <button class="filter-button" type="button" data-status="leased">已预约</button>
+                        <button class="filter-button" type="button" data-status="leased">已预约资源</button>
                         <button class="filter-button" type="button" data-status="attention">需要关注</button>
                     </div>
                     <label class="select-control">
@@ -222,7 +210,8 @@
                                 <th>服务器</th>
                                 <th>状态</th>
                                 <th>当前用户</th>
-                                <th>说明</th>
+                                <th>说明 / 预约</th>
+                                <th>操作</th>
                             </tr>
                         </thead>
                         <tbody id="slotRows"></tbody>

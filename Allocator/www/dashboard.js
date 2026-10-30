@@ -27,9 +27,6 @@ const elements = {
     statAvailable: document.getElementById("statAvailable"),
     statPlayers: document.getElementById("statPlayers"),
     statLeased: document.getElementById("statLeased"),
-    reservedSummary: document.getElementById("reservedSummary"),
-    reservedList: document.getElementById("reservedList"),
-    reservedEmpty: document.getElementById("reservedEmpty"),
     noticeBanner: document.getElementById("noticeBanner"),
     workerSummary: document.getElementById("workerSummary"),
     workerRows: document.getElementById("workerRows"),
@@ -333,57 +330,10 @@ function renderWorkers(summary) {
     state.workerId = elements.workerFilter.value;
 }
 
-function reservationStatusLabel(status) {
-    return {
-        starting: "启动中",
-        ready: "等待连接",
-        disconnected: "等待重连",
-        active: "已连接"
-    }[status] || statusLabel(status);
-}
-
 function updateReservationCountdowns() {
-    for (const item of elements.reservedList.querySelectorAll("[data-deadline]")) {
+    for (const item of elements.slotRows.querySelectorAll("[data-deadline]")) {
         item.textContent = formatRemaining(item.dataset.deadline);
     }
-}
-
-function renderReservations(summary) {
-    const reservations = summary.slots.filter(
-        (slot) => slot.lease && Number(slot.playerCount) === 0
-    );
-    elements.reservedSummary.textContent = `${reservations.length} 条`;
-    elements.reservedList.innerHTML = reservations
-        .map(
-            (slot) => `
-                <article class="reserved-item">
-                    <div class="reserved-resource">
-                        <strong>${escapeHtml(slot.workerId)} / ${escapeHtml(slot.id)}</strong>
-                        <span class="status-badge ${statusClass(slot.lease.status)}">${escapeHtml(reservationStatusLabel(slot.lease.status))}</span>
-                    </div>
-                    <div class="reserved-detail">
-                        <span>预约 IP</span>
-                        <strong class="mono">${escapeHtml(slot.lease.clientAddress || "未知")}</strong>
-                    </div>
-                    <div class="reserved-detail">
-                        <span>剩余时间</span>
-                        <strong
-                            class="reserved-time"
-                            data-deadline="${escapeHtml(slot.lease.deadline)}"
-                            title="截止 ${escapeHtml(slot.lease.deadline)}"
-                        >${escapeHtml(formatRemaining(slot.lease.deadline))}</strong>
-                    </div>
-                    <button
-                        class="release-button"
-                        type="button"
-                        data-release-worker="${escapeHtml(slot.workerId)}"
-                        data-release-slot="${escapeHtml(slot.id)}"
-                    >释放并停止</button>
-                </article>
-            `
-        )
-        .join("");
-    elements.reservedEmpty.classList.toggle("hidden", reservations.length > 0);
 }
 
 async function releaseReservation(button) {
@@ -525,6 +475,26 @@ function renderSlots(summary) {
     for (const slot of slots) {
         const worker = state.workerById.get(slot.workerId);
         const status = worker && worker.online === false ? "offline" : normalizedStatus(slot);
+        const playerCount = Number(slot.playerCount) || 0;
+        const isReservation = Boolean(slot.lease) && playerCount === 0;
+        const detailMarkup = isReservation
+            ? `
+                <div class="reservation-summary">
+                    <span>IP <strong class="mono">${escapeHtml(slot.lease.clientAddress || "未知")}</strong></span>
+                    <span>剩余 <strong class="reserved-time" data-deadline="${escapeHtml(slot.lease.deadline)}">${escapeHtml(formatRemaining(slot.lease.deadline))}</strong></span>
+                </div>
+            `
+            : escapeHtml(slotDescription(status, slot));
+        const actionMarkup = isReservation
+            ? `
+                <button
+                    class="release-button"
+                    type="button"
+                    data-release-worker="${escapeHtml(slot.workerId)}"
+                    data-release-slot="${escapeHtml(slot.id)}"
+                >释放并停止</button>
+            `
+            : '<span class="muted">—</span>';
 
         const row = document.createElement("tr");
         row.innerHTML = `
@@ -533,11 +503,12 @@ function renderSlots(summary) {
             <td><span class="status-badge ${statusClass(status)}">${escapeHtml(statusLabel(status))}</span></td>
             <td>
                 <span class="player-meter">
-                    <span class="player-dots">${playerDots(Number(slot.playerCount) || 0, slot.capacity)}</span>
-                    <span class="mono">${Number(slot.playerCount) || 0} / ${Number(slot.capacity) || 0}</span>
+                    <span class="player-dots">${playerDots(playerCount, slot.capacity)}</span>
+                    <span class="mono">${playerCount} / ${Number(slot.capacity) || 0}</span>
                 </span>
             </td>
-            <td class="description-cell" title="${escapeHtml(slot.lastError || "")}">${escapeHtml(slotDescription(status, slot))}</td>
+            <td class="description-cell" title="${escapeHtml(slot.lastError || "")}">${detailMarkup}</td>
+            <td class="action-cell">${actionMarkup}</td>
         `;
         elements.slotRows.appendChild(row);
     }
@@ -580,7 +551,6 @@ function renderDashboard(data) {
     elements.footerSync.textContent = `最近同步 ${formatTime(state.lastUpdatedAt.toISOString())}`;
 
     renderWorkers(summary);
-    renderReservations(summary);
     renderSlots(summary);
     renderNotice(summary);
 }
@@ -682,7 +652,7 @@ elements.statusFilters.addEventListener("click", (event) => {
     }
 });
 
-elements.reservedList.addEventListener("click", (event) => {
+elements.slotRows.addEventListener("click", (event) => {
     const button = event.target.closest("[data-release-worker]");
     if (button) {
         void releaseReservation(button);
