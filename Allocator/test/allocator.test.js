@@ -486,6 +486,11 @@ test('Allocator reserves warm capacity, starts a cold slot, and releases disconn
     assert.equal(dashboardResponse.status, 200);
     const dashboardHtml = await dashboardResponse.text();
     assert.match(dashboardHtml, /流资源驾驶舱/);
+    assert.match(dashboardHtml, /class="metric-label">总资源数/);
+    assert.match(dashboardHtml, /class="metric-label">可用/);
+    assert.match(dashboardHtml, /class="metric-label">已连接/);
+    assert.match(dashboardHtml, /class="metric-label">已预约/);
+    assert.doesNotMatch(dashboardHtml, /活跃 Player/);
     assert.match(dashboardHtml, /id="bootLayer"/);
     assert.match(dashboardHtml, /class="auth-layer hidden" id="authLayer"/);
     assert.match(
@@ -498,6 +503,7 @@ test('Allocator reserves warm capacity, starts a cold slot, and releases disconn
     const dashboardScriptText = await dashboardScript.text();
     assert.match(dashboardScriptText, /REFRESH_INTERVAL_MS = 3000/);
     assert.match(dashboardScriptText, /正在验证已保存的会话/);
+    assert.match(dashboardScriptText, /slotDescription/);
 
     const dashboardRedirect = await fetch(`${baseUrl}/dashboard`, {
         redirect: 'manual'

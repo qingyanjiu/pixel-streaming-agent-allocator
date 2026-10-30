@@ -87,30 +87,30 @@
         <main class="content">
             <section class="hero panel">
                 <div class="hero-copy">
-                    <p class="eyebrow">LIVE RESOURCE OVERVIEW</p>
+                    <p class="eyebrow">服务概况</p>
                     <h1>流资源驾驶舱</h1>
                     <p>
-                        Allocator、Worker 和 Slot 的实时资源分布。
+                        快速查看当前可用线路、使用人数和服务异常。
                         <span id="lastUpdated">等待首次同步</span>
                     </p>
                     <div class="hero-chips">
                         <span class="chip">
                             <i class="chip-dot chip-dot-green"></i>
-                            Worker <strong id="onlineWorkers">0 / 0</strong> 在线
+                            服务器 <strong id="onlineWorkers">0 / 0</strong> 在线
                         </span>
                         <span class="chip">
-                            总容量 <strong id="totalCapacity">0</strong>
+                            线路总数 <strong id="totalSlots">0</strong>
                         </span>
                         <span class="chip">
                             <i class="chip-dot chip-dot-blue"></i>
-                            自动同步 <strong>3s</strong>
+                            每 <strong>3 秒</strong> 更新
                         </span>
                     </div>
                 </div>
                 <div class="readiness-orbit" id="readinessOrbit">
                     <div class="orbit-core">
                         <strong id="readinessPercent">0%</strong>
-                        <span>就绪率</span>
+                        <span>正常比例</span>
                     </div>
                 </div>
             </section>
@@ -119,34 +119,24 @@
 
             <section class="metric-grid" aria-label="资源统计">
                 <article class="metric-card metric-total">
-                    <span class="metric-label">总路数</span>
+                    <span class="metric-label">总资源数</span>
                     <strong id="statTotal">0</strong>
-                    <span class="metric-foot">Allocator 登记的全部 Slot</span>
-                </article>
-                <article class="metric-card metric-ready">
-                    <span class="metric-label">已就绪</span>
-                    <strong id="statReady">0</strong>
-                    <span class="metric-foot">Wilbur 与 UE 可用</span>
-                </article>
-                <article class="metric-card metric-unready">
-                    <span class="metric-label">未就绪</span>
-                    <strong id="statUnready">0</strong>
-                    <span class="metric-foot">停止、启动中或异常</span>
+                    <span class="metric-foot">当前登记的全部线路</span>
                 </article>
                 <article class="metric-card metric-free">
-                    <span class="metric-label">空闲可用</span>
+                    <span class="metric-label">可用</span>
                     <strong id="statAvailable">0</strong>
-                    <span class="metric-foot">就绪且没有占用</span>
+                    <span class="metric-foot">已启动且没有被占用</span>
                 </article>
-                <article class="metric-card metric-players">
-                    <span class="metric-label">活跃 Player</span>
+                <article class="metric-card metric-connected">
+                    <span class="metric-label">已连接</span>
                     <strong id="statPlayers">0</strong>
-                    <span class="metric-foot">当前全部 Slot 的 Player 数</span>
+                    <span class="metric-foot" id="statPlayersFoot">当前没有用户连接</span>
                 </article>
                 <article class="metric-card metric-leased">
-                    <span class="metric-label">已预留</span>
+                    <span class="metric-label">已预约</span>
                     <strong id="statLeased">0</strong>
-                    <span class="metric-foot">已绑定客户端 Session</span>
+                    <span class="metric-foot">已分配给客户，等待连接</span>
                 </article>
             </section>
 
@@ -154,49 +144,39 @@
                 <article class="panel worker-panel">
                     <div class="panel-heading">
                         <div>
-                            <p class="eyebrow">WORKER FLEET</p>
-                            <h2>Worker 节点</h2>
+                            <p class="eyebrow">服务器状态</p>
+                            <h2>服务器</h2>
                         </div>
-                        <span class="panel-count" id="workerSummary">0 个节点</span>
+                        <span class="panel-count" id="workerSummary">0 / 0 在线</span>
                     </div>
                     <div class="table-wrap compact-table">
                         <table>
                             <thead>
                                 <tr>
-                                    <th>节点</th>
-                                    <th>状态</th>
-                                    <th>Slot</th>
-                                    <th>Player</th>
-                                    <th>最后在线</th>
+                                    <th>服务器</th>
+                                    <th>连接</th>
+                                    <th>可用线路</th>
+                                    <th>当前用户</th>
+                                    <th>最近响应</th>
                                 </tr>
                             </thead>
                             <tbody id="workerRows"></tbody>
                         </table>
                     </div>
-                    <div class="empty-state hidden" id="workerEmpty">没有 Worker 信息</div>
-                </article>
-
-                <article class="panel distribution-panel">
-                    <div class="panel-heading">
-                        <div>
-                            <p class="eyebrow">RESOURCE DISTRIBUTION</p>
-                            <h2>状态分布</h2>
-                        </div>
-                    </div>
-                    <div class="distribution-list" id="distributionList"></div>
+                    <div class="empty-state hidden" id="workerEmpty">没有服务器信息</div>
                 </article>
             </section>
 
             <section class="panel slot-panel">
                 <div class="panel-heading slot-heading">
                     <div>
-                        <p class="eyebrow">SLOT INVENTORY</p>
-                        <h2>流资源列表</h2>
+                        <p class="eyebrow">线路状态</p>
+                        <h2>线路明细</h2>
                     </div>
                     <div class="slot-actions">
                         <label class="search-box">
                             <span aria-hidden="true">⌕</span>
-                            <input id="slotSearch" type="search" placeholder="搜索 Slot、Worker 或 URL">
+                            <input id="slotSearch" type="search" placeholder="搜索线路或服务器">
                         </label>
                         <label class="toggle-control">
                             <input id="autoRefresh" type="checkbox" checked>
@@ -209,10 +189,10 @@
                 <div class="filter-row">
                     <div class="filter-tabs" id="statusFilters" role="group" aria-label="状态筛选">
                         <button class="filter-button active" type="button" data-status="all">全部</button>
-                        <button class="filter-button" type="button" data-status="ready">就绪</button>
-                        <button class="filter-button" type="button" data-status="busy">占用</button>
-                        <button class="filter-button" type="button" data-status="stopped">停止</button>
-                        <button class="filter-button" type="button" data-status="failed">异常</button>
+                        <button class="filter-button" type="button" data-status="available">可用</button>
+                        <button class="filter-button" type="button" data-status="busy">使用中</button>
+                        <button class="filter-button" type="button" data-status="leased">已预约</button>
+                        <button class="filter-button" type="button" data-status="attention">需要关注</button>
                     </div>
                     <label class="select-control">
                         <span>Worker</span>
@@ -226,21 +206,17 @@
                     <table class="slot-table">
                         <thead>
                             <tr>
-                                <th>Slot</th>
-                                <th>Worker</th>
+                                <th>线路</th>
+                                <th>服务器</th>
                                 <th>状态</th>
-                                <th>Player</th>
-                                <th>端口</th>
-                                <th>公开地址</th>
-                                <th>进程 PID</th>
-                                <th>Session</th>
-                                <th>错误</th>
+                                <th>当前用户</th>
+                                <th>说明</th>
                             </tr>
                         </thead>
                         <tbody id="slotRows"></tbody>
                     </table>
                 </div>
-                <div class="empty-state hidden" id="slotEmpty">当前筛选条件下没有 Slot</div>
+                <div class="empty-state hidden" id="slotEmpty">当前筛选条件下没有线路</div>
             </section>
         </main>
 

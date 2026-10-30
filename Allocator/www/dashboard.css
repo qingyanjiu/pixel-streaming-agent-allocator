@@ -565,15 +565,15 @@ button {
 
 .metric-grid {
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
 }
 
 .metric-card {
     position: relative;
-    min-height: 136px;
+    min-height: 148px;
     overflow: hidden;
-    padding: 20px;
+    padding: 22px;
     border-radius: var(--radius-md);
 }
 
@@ -591,16 +591,16 @@ button {
 
 .metric-label {
     color: var(--muted);
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 600;
     letter-spacing: 0.08em;
 }
 
 .metric-card strong {
     display: block;
-    margin: 14px 0 13px;
+    margin: 15px 0 14px;
     color: var(--accent, var(--blue));
-    font-size: 38px;
+    font-size: 44px;
     font-weight: 500;
     letter-spacing: -0.055em;
     line-height: 1;
@@ -609,20 +609,13 @@ button {
 
 .metric-foot {
     color: var(--faint);
-    font-size: 10px;
+    font-size: 11px;
     line-height: 1.45;
 }
 
-.metric-ready,
 .metric-free {
     --accent: var(--green);
     --accent-soft: var(--green-soft);
-}
-
-.metric-unready,
-.metric-leased {
-    --accent: var(--amber);
-    --accent-soft: var(--amber-soft);
 }
 
 .metric-total {
@@ -630,14 +623,19 @@ button {
     --accent-soft: var(--blue-soft);
 }
 
-.metric-players {
+.metric-connected {
     --accent: var(--violet);
     --accent-soft: rgba(175, 145, 255, 0.13);
 }
 
+.metric-leased {
+    --accent: var(--amber);
+    --accent-soft: var(--amber-soft);
+}
+
 .overview-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1.75fr) minmax(320px, 0.75fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: 18px;
 }
 
@@ -790,12 +788,22 @@ tbody tr:last-child td {
 }
 
 .status-starting,
-.status-stopping,
-.status-busy,
-.status-leased {
+.status-stopping {
     border-color: rgba(255, 196, 93, 0.2);
     background: var(--amber-soft);
     color: var(--amber);
+}
+
+.status-busy {
+    border-color: rgba(175, 145, 255, 0.22);
+    background: rgba(175, 145, 255, 0.12);
+    color: var(--violet);
+}
+
+.status-leased {
+    border-color: rgba(105, 184, 255, 0.22);
+    background: var(--blue-soft);
+    color: var(--blue);
 }
 
 .status-stopped {
@@ -961,7 +969,7 @@ tbody tr:last-child td {
 }
 
 .slot-table {
-    min-width: 1160px;
+    min-width: 760px;
 }
 
 .slot-name {
@@ -1018,10 +1026,10 @@ tbody tr:last-child td {
     box-shadow: 0 0 8px rgba(81, 225, 179, 0.35);
 }
 
-.error-cell {
-    max-width: 210px;
+.description-cell {
+    max-width: 360px;
     overflow: hidden;
-    color: var(--red);
+    color: var(--muted);
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -1059,7 +1067,7 @@ tbody tr:last-child td {
 
 @media (max-width: 1240px) {
     .metric-grid {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .overview-grid {

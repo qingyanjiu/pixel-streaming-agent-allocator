@@ -20,20 +20,18 @@ const elements = {
     lockButton: document.getElementById("lockButton"),
     lastUpdated: document.getElementById("lastUpdated"),
     onlineWorkers: document.getElementById("onlineWorkers"),
-    totalCapacity: document.getElementById("totalCapacity"),
+    totalSlots: document.getElementById("totalSlots"),
     readinessOrbit: document.getElementById("readinessOrbit"),
     readinessPercent: document.getElementById("readinessPercent"),
     statTotal: document.getElementById("statTotal"),
-    statReady: document.getElementById("statReady"),
-    statUnready: document.getElementById("statUnready"),
     statAvailable: document.getElementById("statAvailable"),
     statPlayers: document.getElementById("statPlayers"),
+    statPlayersFoot: document.getElementById("statPlayersFoot"),
     statLeased: document.getElementById("statLeased"),
     noticeBanner: document.getElementById("noticeBanner"),
     workerSummary: document.getElementById("workerSummary"),
     workerRows: document.getElementById("workerRows"),
     workerEmpty: document.getElementById("workerEmpty"),
-    distributionList: document.getElementById("distributionList"),
     slotRows: document.getElementById("slotRows"),
     slotEmpty: document.getElementById("slotEmpty"),
     slotSearch: document.getElementById("slotSearch"),
@@ -65,15 +63,6 @@ function escapeHtml(value) {
         .replaceAll(">", "&gt;")
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
-}
-
-function truncateMiddle(value, visible = 12) {
-    const text = String(value ?? "");
-    if (text.length <= visible) {
-        return text;
-    }
-    const side = Math.max(4, Math.floor((visible - 1) / 2));
-    return `${text.slice(0, side)}…${text.slice(-side)}`;
 }
 
 function formatTime(value) {
@@ -110,6 +99,9 @@ function formatRelative(value) {
 }
 
 function normalizedStatus(slot) {
+    if (slot.status === "starting" || slot.status === "stopping") {
+        return slot.status;
+    }
     if (slot.playerCount > 0) {
         return "busy";
     }
@@ -124,19 +116,23 @@ function normalizedStatus(slot) {
 
 function statusLabel(status) {
     return {
-        ready: "就绪",
-        busy: "占用",
-        leased: "预留",
-        starting: "启动中",
-        stopping: "停止中",
-        stopped: "已停止",
-        failed: "异常"
+        ready: "可用",
+        busy: "使用中",
+        leased: "等待用户",
+        starting: "正在启动",
+        stopping: "正在停止",
+        stopped: "未启动",
+        failed: "异常",
+        offline: "服务器离线"
     }[status] || status;
 }
 
 function statusClass(status) {
-    if (["ready", "busy"].includes(status)) {
-        return status === "ready" ? "status-ready" : "status-busy";
+    if (status === "ready") {
+        return "status-ready";
+    }
+    if (status === "busy") {
+        return "status-busy";
     }
     if (status === "leased") {
         return "status-leased";
@@ -144,7 +140,7 @@ function statusClass(status) {
     if (status === "starting" || status === "stopping") {
         return `status-${status}`;
     }
-    if (status === "failed") {
+    if (status === "failed" || status === "offline") {
         return "status-failed";
     }
     return "status-stopped";
@@ -223,35 +219,58 @@ async function fetchSlots() {
 function calculateSummary(data) {
     const slots = data.slots || [];
     const workers = data.workers || [];
-    const ready = slots.filter((slot) => slot.ready).length;
-    const available = slots.filter(
-        (slot) => slot.ready && Number(slot.playerCount) === 0 && !slot.leasedTo
-    ).length;
-    const leased = slots.filter((slot) => Boolean(slot.leasedTo)).length;
+    const onlineWorkerIds = new Set(
+        workers.filter((worker) => worker.online).map((worker) => worker.id)
+    );
+    let availableHot = 0;
+    let inUse = 0;
+    let unavailableSlots = 0;
+    let leased = 0;
+
+    for (const slot of slots) {
+        if (slot.leasedTo) {
+            leased += 1;
+        }
+        const workerOnline = onlineWorkerIds.has(slot.workerId);
+        if (!workerOnline || slot.status === "failed") {
+            unavailableSlots += 1;
+        } else if (Number(slot.playerCount) > 0 || slot.leasedTo) {
+            inUse += 1;
+        } else if (slot.ready) {
+            availableHot += 1;
+        } else {
+            if (!["starting", "stopping", "stopped"].includes(slot.status)) {
+                unavailableSlots += 1;
+            }
+        }
+    }
+
     const players = slots.reduce((sum, slot) => sum + (Number(slot.playerCount) || 0), 0);
-    const capacity = slots.reduce((sum, slot) => sum + (Number(slot.capacity) || 0), 0);
     return {
         slots,
         workers,
         total: slots.length,
-        ready,
-        unready: slots.length - ready,
-        available,
+        availableHot,
         leased,
+        inUse,
         players,
-        capacity,
         onlineWorkers: workers.filter((worker) => worker.online).length,
-        failedWorkers: workers.filter((worker) => !worker.online).length
+        failedWorkers: workers.filter((worker) => !worker.online).length,
+        normal: slots.length - unavailableSlots
     };
 }
 
 function renderWorkers(summary) {
     state.workerById = new Map(summary.workers.map((worker) => [worker.id, worker]));
-    elements.workerSummary.textContent = `${summary.workers.length} 个节点`;
+    elements.workerSummary.textContent = `${summary.onlineWorkers} / ${summary.workers.length} 在线`;
     elements.workerRows.innerHTML = "";
 
     for (const worker of summary.workers) {
         const workerSlots = summary.slots.filter((slot) => slot.workerId === worker.id);
+        const availableSlots = workerSlots.filter(
+            (slot) =>
+                slot.ready && Number(slot.playerCount) === 0 && !slot.leasedTo
+        ).length;
         const players = workerSlots.reduce(
             (sum, slot) => sum + (Number(slot.playerCount) || 0),
             0
@@ -268,7 +287,7 @@ function renderWorkers(summary) {
                 </div>
             </td>
             <td><span class="status-badge ${worker.online ? "status-online" : "status-offline"}">${worker.online ? "在线" : "离线"}</span></td>
-            <td><span class="mono">${workerSlots.filter((slot) => slot.ready).length} / ${workerSlots.length}</span></td>
+            <td><span class="mono">${worker.online ? `${availableSlots} / ${workerSlots.length}` : "0 / " + workerSlots.length}</span></td>
             <td><span class="mono">${players}</span></td>
             <td title="${escapeHtml(worker.lastError || worker.lastSeenAt || "")}">${escapeHtml(formatRelative(worker.lastSeenAt))}</td>
         `;
@@ -293,69 +312,22 @@ function renderWorkers(summary) {
     state.workerId = elements.workerFilter.value;
 }
 
-function renderDistribution(summary) {
-    const counts = {
-        ready: 0,
-        busy: 0,
-        leased: 0,
-        starting: 0,
-        stopped: 0,
-        failed: 0
-    };
-    for (const slot of summary.slots) {
-        const status = normalizedStatus(slot);
-        if (status === "busy") {
-            counts.busy += 1;
-        } else if (status === "leased") {
-            counts.leased += 1;
-        } else if (status === "ready") {
-            counts.ready += 1;
-        } else if (status === "starting" || status === "stopping") {
-            counts.starting += 1;
-        } else if (status === "failed") {
-            counts.failed += 1;
-        } else {
-            counts.stopped += 1;
-        }
-    }
-
-    const rows = [
-        ["就绪", counts.ready, "var(--green)"],
-        ["占用", counts.busy, "var(--violet)"],
-        ["预留", counts.leased, "var(--amber)"],
-        ["启动/切换", counts.starting, "var(--blue)"],
-        ["停止", counts.stopped, "#8295a7"],
-        ["异常", counts.failed, "var(--red)"]
-    ];
-
-    elements.distributionList.innerHTML = rows
-        .map(([label, count, color]) => {
-            const percent = summary.total > 0 ? Math.round((count / summary.total) * 100) : 0;
-            return `
-                <div class="distribution-row">
-                    <span class="distribution-label">${label}</span>
-                    <span class="distribution-track">
-                        <span class="distribution-fill" style="width: ${percent}%; --bar-color: ${color}"></span>
-                    </span>
-                    <span class="distribution-value">${count}</span>
-                </div>
-            `;
-        })
-        .join("");
-}
-
 function slotMatches(slot) {
-    const status = normalizedStatus(slot);
-    if (state.slotStatus === "ready" && status !== "ready") {
+    const worker = state.workerById.get(slot.workerId);
+    const status = worker && worker.online === false ? "offline" : normalizedStatus(slot);
+    if (state.slotStatus === "available" && status !== "ready") {
         return false;
     }
     if (state.slotStatus === "busy" && status !== "busy") {
         return false;
     }
-    if (state.slotStatus === "stopped" && !["stopped", "leased"].includes(status)) {
+    if (state.slotStatus === "leased" && status !== "leased") {
         return false;
     }
-    if (state.slotStatus === "failed" && status !== "failed") {
+    if (
+        state.slotStatus === "attention" &&
+        !["failed", "offline"].includes(status)
+    ) {
         return false;
     }
     if (state.workerId !== "all" && slot.workerId !== state.workerId) {
@@ -365,8 +337,7 @@ function slotMatches(slot) {
         const haystack = [
             slot.id,
             slot.workerId,
-            slot.publicUrl,
-            slot.leasedTo,
+            statusLabel(status),
             slot.status
         ]
             .filter(Boolean)
@@ -379,29 +350,41 @@ function slotMatches(slot) {
     return true;
 }
 
+function slotDescription(status, slot) {
+    if (status === "offline") {
+        return "服务器当前离线";
+    }
+    if (status === "failed") {
+        return slot.lastError || "实例运行异常";
+    }
+    if (status === "starting") {
+        return "正在启动，请稍候";
+    }
+    if (status === "stopping") {
+        return "正在关闭，请稍候";
+    }
+    if (status === "busy") {
+        return "用户正在使用";
+    }
+    if (status === "leased") {
+        return "已分配，等待用户连接";
+    }
+    if (status === "ready") {
+        return "可以接受新用户";
+    }
+    if (status === "stopped") {
+        return "有新请求时自动启动";
+    }
+    return "状态未知";
+}
+
 function renderSlots(summary) {
     const slots = summary.slots.filter(slotMatches);
     elements.slotRows.innerHTML = "";
 
     for (const slot of slots) {
-        const status = normalizedStatus(slot);
-        const ports = [
-            `S ${slot.ports?.streamer ?? "—"}`,
-            `P ${slot.ports?.player ?? "—"}`,
-            `F ${slot.ports?.sfu ?? "—"}`
-        ].join(" · ");
-        const pids = [
-            slot.pids?.ue ? `UE ${slot.pids.ue}` : null,
-            slot.pids?.wilbur ? `W ${slot.pids.wilbur}` : null
-        ]
-            .filter(Boolean)
-            .join(" / ");
-        const sessionValue = slot.leasedTo
-            ? `<span class="mono" title="${escapeHtml(slot.leasedTo)}">${escapeHtml(truncateMiddle(slot.leasedTo, 16))}</span>`
-            : '<span class="muted">—</span>';
-        const urlValue = slot.publicUrl
-            ? `<a class="url-link mono" href="${escapeHtml(slot.publicUrl)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(slot.publicUrl)}">${escapeHtml(slot.publicUrl)}</a>`
-            : '<span class="muted">—</span>';
+        const worker = state.workerById.get(slot.workerId);
+        const status = worker && worker.online === false ? "offline" : normalizedStatus(slot);
 
         const row = document.createElement("tr");
         row.innerHTML = `
@@ -414,11 +397,7 @@ function renderSlots(summary) {
                     <span class="mono">${Number(slot.playerCount) || 0} / ${Number(slot.capacity) || 0}</span>
                 </span>
             </td>
-            <td><span class="mono">${escapeHtml(ports)}</span></td>
-            <td>${urlValue}</td>
-            <td><span class="mono">${escapeHtml(pids || "—")}</span></td>
-            <td>${sessionValue}</td>
-            <td class="error-cell" title="${escapeHtml(slot.lastError || "")}">${escapeHtml(slot.lastError || "—")}</td>
+            <td class="description-cell" title="${escapeHtml(slot.lastError || "")}">${escapeHtml(slotDescription(status, slot))}</td>
         `;
         elements.slotRows.appendChild(row);
     }
@@ -446,23 +425,25 @@ function renderDashboard(data) {
     state.lastUpdatedAt = new Date();
 
     elements.statTotal.textContent = summary.total;
-    elements.statReady.textContent = summary.ready;
-    elements.statUnready.textContent = summary.unready;
-    elements.statAvailable.textContent = summary.available;
+    elements.statAvailable.textContent = summary.availableHot;
     elements.statPlayers.textContent = summary.players;
+    elements.statPlayersFoot.textContent =
+        summary.players > 0
+            ? `${summary.inUse} 条线路正在使用`
+            : "当前没有用户连接";
     elements.statLeased.textContent = summary.leased;
     elements.onlineWorkers.textContent = `${summary.onlineWorkers} / ${summary.workers.length}`;
-    elements.totalCapacity.textContent = summary.capacity;
+    elements.totalSlots.textContent = summary.total;
 
-    const readiness = summary.total > 0 ? Math.round((summary.ready / summary.total) * 100) : 0;
-    elements.readinessPercent.textContent = `${readiness}%`;
-    elements.readinessOrbit.style.setProperty("--readiness", `${readiness * 3.6}deg`);
+    const normalPercent =
+        summary.total > 0 ? Math.round((summary.normal / summary.total) * 100) : 0;
+    elements.readinessPercent.textContent = `${normalPercent}%`;
+    elements.readinessOrbit.style.setProperty("--readiness", `${normalPercent * 3.6}deg`);
 
     elements.lastUpdated.textContent = `最后同步 ${formatTime(state.lastUpdatedAt.toISOString())}`;
     elements.footerSync.textContent = `最近同步 ${formatTime(state.lastUpdatedAt.toISOString())}`;
 
     renderWorkers(summary);
-    renderDistribution(summary);
     renderSlots(summary);
     renderNotice(summary);
 }
