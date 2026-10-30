@@ -51,10 +51,11 @@ set "PS_NODE_EXE=node.exe"
 - `gatewayTokenFile`：Gateway 调用 Ticket 校验接口时使用的 Token 文件。
 - `corsAllowedOrigins`：允许直接访问的网页来源。
 - `listenPort`：默认 `9200`。
-- `connectTimeoutMs`：实例就绪后等待首次连接的时间，默认 10 分钟。
-- `idleReleaseMs`：断线后等待同一 Session 重连的时间，默认 10 分钟。
+- `idleReleaseMs`：统一空闲超时，默认 10 分钟。等待首次连接、连接中保活和断线重连都使用同一个动态截止时间。
 - Worker 报告 `stopped/failed` 时立即释放 Session，不等待重连窗口。
 - `workersFile`：Worker 清单路径，默认 `./config/workers.json`。
+
+玩家在线时，只要 Wilbur 心跳检测仍能确认连接有效，Allocator 就会持续刷新同一个空闲截止时间；在线期间不存在固定的 Session TTL 强制断开。
 
 修改 [config/workers.json](config/workers.json)：
 

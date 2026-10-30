@@ -252,7 +252,11 @@ test('Allocator returns a Gateway URL and invalidates its ticket after release',
         headers: validationHeaders,
         body: JSON.stringify({ ticket })
     });
-    assert.equal(validTicket.response.status, 200);
+    assert.equal(
+        validTicket.response.status,
+        200,
+        JSON.stringify(validTicket.payload)
+    );
     assert.equal(validTicket.payload.valid, true);
     assert.equal(validTicket.payload.workerId, 'worker-test');
     assert.equal(validTicket.payload.slotId, 'T1');
@@ -297,7 +301,6 @@ test('Dashboard lease inventory exposes client IP and can release and stop a Slo
             autoStart: false,
             stopOnRelease: false,
             pollIntervalMs: 60_000,
-            connectTimeoutMs: 60_000,
             workers: [
                 {
                     id: 'worker-test',
@@ -343,6 +346,24 @@ test('Dashboard lease inventory exposes client IP and can release and stop a Slo
     assert.equal(leasedSlot.lease.status, 'ready');
     assert.ok(Date.parse(leasedSlot.lease.deadline) > Date.now());
 
+    fakeAgent.setPlayerCount('T1', 1);
+    await allocator.reconcileSessions();
+    const activeInventory = await requestJson(`${baseUrl}/api/slots`, { headers });
+    const activeLease = activeInventory.payload.slots.find(
+        (slot) => slot.id === leasedSlot.id
+    ).lease;
+    assert.equal(activeLease.status, 'active');
+    assert.ok(Date.parse(activeLease.deadline) > Date.now());
+
+    fakeAgent.setPlayerCount('T1', 0);
+    await allocator.reconcileSessions();
+    const disconnectedInventory = await requestJson(`${baseUrl}/api/slots`, { headers });
+    const disconnectedLease = disconnectedInventory.payload.slots.find(
+        (slot) => slot.id === leasedSlot.id
+    ).lease;
+    assert.equal(disconnectedLease.status, 'disconnected');
+    assert.ok(Date.parse(disconnectedLease.deadline) > Date.now());
+
     const unauthorized = await requestJson(
         `${baseUrl}/api/slots/worker-test/${leasedSlot.id}/release`,
         {
@@ -385,7 +406,6 @@ test('No-capacity responses can be retried with the same idempotency key', async
             autoStart: false,
             stopOnRelease: true,
             pollIntervalMs: 60_000,
-            connectTimeoutMs: 50,
             idleReleaseMs: 10,
             workers: [
                 {
@@ -448,7 +468,6 @@ test('Manual Worker Slot stop immediately releases the Allocator lease', async (
             autoStart: false,
             stopOnRelease: true,
             pollIntervalMs: 60_000,
-            connectTimeoutMs: 60_000,
             idleReleaseMs: 60_000,
             workers: [
                 {
@@ -543,8 +562,7 @@ test('Allocator reserves warm capacity, starts a cold slot, and releases disconn
             autoStart: true,
             stopOnRelease: true,
             pollIntervalMs: 60_000,
-            connectTimeoutMs: 60_000,
-            idleReleaseMs: 10,
+            idleReleaseMs: 60_000,
             sessionRetentionMs: 60_000,
             corsAllowedOrigins: ['http://client.example'],
             workers: [
@@ -645,7 +663,7 @@ test('Allocator reserves warm capacity, starts a cold slot, and releases disconn
             ...headers,
             'Idempotency-Key': 'first-request'
         },
-        body: JSON.stringify({ ttlSeconds: 300 })
+        body: '{}'
     });
     assert.equal(first.response.status, 201);
     assert.equal(first.payload.status, 'ready');
@@ -662,7 +680,7 @@ test('Allocator reserves warm capacity, starts a cold slot, and releases disconn
             ...headers,
             'Idempotency-Key': 'first-request'
         },
-        body: JSON.stringify({ ttlSeconds: 300 })
+        body: '{}'
     });
     assert.equal(duplicate.payload.sessionId, first.payload.sessionId);
     assert.equal(duplicate.payload.sessionToken, first.payload.sessionToken);
@@ -670,7 +688,7 @@ test('Allocator reserves warm capacity, starts a cold slot, and releases disconn
     const second = await requestJson(`${baseUrl}/api/sessions`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ ttlSeconds: 300 })
+        body: '{}'
     });
     assert.equal(second.response.status, 202);
     assert.equal(second.payload.status, 'starting');
@@ -715,8 +733,17 @@ test('Allocator reserves warm capacity, starts a cold slot, and releases disconn
         )
     );
 
-    fakeAgent.setPlayerCount('T1', 0);
     const stored = allocator.sessions.get(first.payload.sessionId);
+    stored.expiresAt = Date.now() - 1;
+    await allocator.reconcileSessions();
+    const activePastOriginalTtl = await requestJson(
+        `${baseUrl}/api/sessions/${first.payload.sessionId}`,
+        { headers: firstHeaders }
+    );
+    assert.equal(activePastOriginalTtl.payload.status, 'active');
+    assert.ok(Date.parse(activePastOriginalTtl.payload.expiresAt) > Date.now());
+
+    fakeAgent.setPlayerCount('T1', 0);
     await allocator.reconcileSessions();
 
     const disconnected = await requestJson(`${baseUrl}/api/sessions/${first.payload.sessionId}`, {
@@ -734,7 +761,7 @@ test('Allocator reserves warm capacity, starts a cold slot, and releases disconn
             ...headers,
             'Idempotency-Key': 'new-user-during-grace'
         },
-        body: JSON.stringify({ ttlSeconds: 300 })
+        body: '{}'
     });
     assert.equal(newUserDuringGrace.response.status, 503);
 

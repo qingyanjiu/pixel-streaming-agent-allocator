@@ -480,11 +480,16 @@ function renderSlots(summary) {
         const playerCount = Number(slot.playerCount) || 0;
         const hasLease = Boolean(slot.lease);
         const isReservation = hasLease && playerCount === 0;
+        const leaseDeadline = slot.lease?.deadline || null;
         const detailMarkup = hasLease
             ? `
                 <div class="reservation-summary">
                     <span>客户 IP <strong class="mono">${escapeHtml(slot.lease.clientAddress || "未知")}</strong></span>
-                    <span>剩余 <strong class="reserved-time" data-deadline="${escapeHtml(slot.lease.deadline)}">${escapeHtml(formatRemaining(slot.lease.deadline))}</strong></span>
+                    ${
+                        leaseDeadline
+                            ? `<span>剩余 <strong class="reserved-time" data-deadline="${escapeHtml(leaseDeadline)}">${escapeHtml(formatRemaining(leaseDeadline))}</strong></span>`
+                            : '<span>连接期间不自动关闭</span>'
+                    }
                 </div>
             `
             : escapeHtml(slotDescription(status, slot));

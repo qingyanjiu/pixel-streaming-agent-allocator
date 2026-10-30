@@ -20,11 +20,7 @@ const DEFAULTS = {
     workerRequestTimeoutMs: 5_000,
     workerStartTimeoutMs: 210_000,
     workerStopTimeoutMs: 30_000,
-    connectTimeoutMs: 600_000,
     idleReleaseMs: 600_000,
-    defaultTtlSeconds: 3_600,
-    minTtlSeconds: 60,
-    maxTtlSeconds: 86_400,
     autoStart: true,
     stopOnRelease: true,
     sessionRetentionMs: 3_600_000,
@@ -286,23 +282,22 @@ function createAllocator(config, options = {}) {
         return address;
     }
 
+    function effectiveSessionDeadline(session) {
+        return session.expiresAt || null;
+    }
+
     function serializeLease(session) {
         if (!session) {
             return null;
         }
-        let deadline = session.expiresAt;
-        if (session.status === 'disconnected' && session.reconnectDeadline) {
-            deadline = session.reconnectDeadline;
-        } else if (['starting', 'ready'].includes(session.status)) {
-            deadline = session.reservedAt + settings.connectTimeoutMs;
-        }
+        const deadline = effectiveSessionDeadline(session);
         return {
             sessionId: session.id,
             status: session.status,
             clientAddress: normalizeClientAddress(session.clientAddress),
             reservedAt: new Date(session.reservedAt).toISOString(),
-            expiresAt: new Date(session.expiresAt).toISOString(),
-            deadline: new Date(Math.min(deadline, session.expiresAt)).toISOString()
+            expiresAt: deadline ? new Date(deadline).toISOString() : null,
+            deadline: deadline ? new Date(deadline).toISOString() : null
         };
     }
 
@@ -342,7 +337,7 @@ function createAllocator(config, options = {}) {
             case 'ready':
                 return '服务已就绪，正在等待播放器连接。';
             case 'active':
-                return '已连接到 Pixel Streaming 服务。';
+                return '已连接到 Pixel Streaming 服务；连接期间不会自动关闭。';
             case 'disconnected': {
                 const remainingSeconds = Math.max(
                     0,
@@ -380,7 +375,9 @@ function createAllocator(config, options = {}) {
             reconnectDeadline: session.reconnectDeadline
                 ? new Date(session.reconnectDeadline).toISOString()
                 : null,
-            expiresAt: new Date(session.expiresAt).toISOString(),
+            expiresAt: effectiveSessionDeadline(session)
+                ? new Date(effectiveSessionDeadline(session)).toISOString()
+                : null,
             reason: session.reason || null,
             error: session.error || null
         };
@@ -390,9 +387,8 @@ function createAllocator(config, options = {}) {
         return response;
     }
 
-    function newSession(ttlSeconds, requestContext = {}) {
+    function newSession(requestContext = {}) {
         const now = Date.now();
-        const ttl = Number(ttlSeconds) || settings.defaultTtlSeconds;
         return {
             id: crypto.randomUUID(),
             sessionToken: crypto.randomBytes(32).toString('base64url'),
@@ -407,7 +403,7 @@ function createAllocator(config, options = {}) {
             updatedAt: now,
             reservedAt: now,
             readyAt: null,
-            expiresAt: now + ttl * 1_000,
+            expiresAt: now + settings.idleReleaseMs,
             lastPlayerSeenAt: null,
             disconnectedAt: null,
             reconnectDeadline: null,
@@ -445,6 +441,7 @@ function createAllocator(config, options = {}) {
         session.slotId = slot.id;
         session.publicUrl = slot.publicUrl;
         session.url = buildPlayUrl(session, worker);
+        session.expiresAt = Date.now() + settings.idleReleaseMs;
         playTickets.set(session.playTicket, session.id);
         session.updatedAt = Date.now();
         slotLeases.set(slotKey(slot.workerId, slot.id), session.id);
@@ -552,7 +549,7 @@ function createAllocator(config, options = {}) {
         }
     }
 
-    async function createSession(ttlSeconds, idempotencyKey, requestContext = {}) {
+    async function createSession(idempotencyKey, requestContext = {}) {
         if (idempotencyKey && idempotencyKeys.has(idempotencyKey)) {
             const existing = sessions.get(idempotencyKeys.get(idempotencyKey));
             logEvent('session_request_reused', {
@@ -562,13 +559,12 @@ function createAllocator(config, options = {}) {
             return existing;
         }
 
-        const session = newSession(ttlSeconds, requestContext);
+        const session = newSession(requestContext);
         sessions.set(session.id, session);
         logEvent('session_created', {
             session: session.id,
             client: session.clientAddress,
-            origin: session.requestOrigin,
-            ttlSeconds
+            origin: session.requestOrigin
         });
         if (idempotencyKey) {
             idempotencyKeys.set(idempotencyKey, session.id);
@@ -671,10 +667,11 @@ function createAllocator(config, options = {}) {
             if (session.status === 'ready') {
                 if (Number(slot.playerCount) > 0) {
                     session.lastPlayerSeenAt = now;
+                    session.expiresAt = now + settings.idleReleaseMs;
                     session.disconnectedAt = null;
                     session.reconnectDeadline = null;
                     setSessionStatus(session, 'active', { reason: 'player_connected' });
-                } else if (now - session.reservedAt > settings.connectTimeoutMs) {
+                } else if (now >= session.expiresAt) {
                     await releaseSession(session, 'client_connect_timeout', true);
                 }
                 continue;
@@ -683,9 +680,10 @@ function createAllocator(config, options = {}) {
             if (session.status === 'active') {
                 if (Number(slot.playerCount) > 0) {
                     session.lastPlayerSeenAt = now;
+                    session.expiresAt = now + settings.idleReleaseMs;
                 } else {
                     session.disconnectedAt = now;
-                    session.reconnectDeadline = now + settings.idleReleaseMs;
+                    session.reconnectDeadline = session.expiresAt;
                     setSessionStatus(session, 'disconnected', { reason: 'player_disconnected' });
                     logEvent('reconnect_window_started', {
                         session: session.id,
@@ -693,15 +691,13 @@ function createAllocator(config, options = {}) {
                         deadline: new Date(session.reconnectDeadline).toISOString()
                     });
                 }
-                if (now >= session.expiresAt) {
-                    await releaseSession(session, 'session_expired', true);
-                }
                 continue;
             }
 
             if (session.status === 'disconnected') {
                 if (Number(slot.playerCount) > 0) {
                     session.lastPlayerSeenAt = now;
+                    session.expiresAt = now + settings.idleReleaseMs;
                     session.disconnectedAt = null;
                     session.reconnectDeadline = null;
                     setSessionStatus(session, 'active', { reason: 'player_reconnected' });
@@ -711,8 +707,6 @@ function createAllocator(config, options = {}) {
                         worker: session.workerId,
                         slot: session.slotId
                     });
-                } else if (now >= session.expiresAt) {
-                    await releaseSession(session, 'session_expired', true);
                 } else if (now >= (session.reconnectDeadline || 0)) {
                     await releaseSession(session, 'reconnect_timeout', true);
                 }
@@ -1007,19 +1001,14 @@ function createAllocator(config, options = {}) {
             }
 
             if (request.method === 'POST' && url.pathname === '/api/sessions') {
-                const body = await readJsonBody(request);
+                await readJsonBody(request);
                 logEvent('client_session_request', {
                     client: clientAddress,
                     origin: request.headers.origin
                 });
-                const requestedTtl = Number(body.ttlSeconds) || settings.defaultTtlSeconds;
-                const ttlSeconds = Math.max(
-                    settings.minTtlSeconds,
-                    Math.min(settings.maxTtlSeconds, requestedTtl)
-                );
                 const idempotencyKey = request.headers['idempotency-key'] || null;
                 const session = await withAllocationLock(() =>
-                    createSession(ttlSeconds, idempotencyKey, {
+                    createSession(idempotencyKey, {
                         clientAddress,
                         origin: request.headers.origin || null
                     })
