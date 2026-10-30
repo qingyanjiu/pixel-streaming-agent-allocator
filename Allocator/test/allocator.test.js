@@ -598,6 +598,11 @@ test('Allocator reserves warm capacity, starts a cold slot, and releases disconn
     assert.match(dashboardScriptText, /slotDescription/);
     assert.match(dashboardScriptText, /releaseReservation/);
     assert.match(dashboardScriptText, /updateReservationCountdowns/);
+    const fetchSlotsSource = dashboardScriptText.slice(
+        dashboardScriptText.indexOf("async function fetchSlots"),
+        dashboardScriptText.indexOf("function calculateSummary")
+    );
+    assert.doesNotMatch(fetchSlotsSource, /\bbutton\b/);
 
     const dashboardRedirect = await fetch(`${baseUrl}/dashboard`, {
         redirect: 'manual'

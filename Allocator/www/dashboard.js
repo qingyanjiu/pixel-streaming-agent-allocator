@@ -238,10 +238,6 @@ async function fetchSlots() {
         return body;
     } finally {
         window.clearTimeout(timeout);
-        if (button.isConnected) {
-            button.disabled = false;
-            button.textContent = "释放并停止";
-        }
     }
 }
 
@@ -437,6 +433,10 @@ async function releaseReservation(button) {
         button.textContent = "释放并停止";
     } finally {
         window.clearTimeout(timeout);
+        if (button.isConnected) {
+            button.disabled = false;
+            button.textContent = "释放并停止";
+        }
     }
 }
 
