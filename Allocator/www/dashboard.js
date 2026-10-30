@@ -229,21 +229,16 @@ function calculateSummary(data) {
 
     for (const slot of slots) {
         const playerCount = Number(slot.playerCount) || 0;
-        if (slot.leasedTo) {
-            leased += 1;
-        }
-        if (!slot.leasedTo && playerCount === 0) {
-            available += 1;
-        }
         const workerOnline = onlineWorkerIds.has(slot.workerId);
-        if (!workerOnline || slot.status === "failed") {
+        const healthy = workerOnline && slot.status !== "failed";
+        if (!healthy) {
             unavailableSlots += 1;
-        } else if (playerCount > 0 || slot.leasedTo) {
+        } else if (playerCount > 0) {
             inUse += 1;
+        } else if (slot.leasedTo) {
+            leased += 1;
         } else {
-            if (!["starting", "stopping", "stopped"].includes(slot.status)) {
-                unavailableSlots += 1;
-            }
+            available += 1;
         }
     }
 
@@ -316,16 +311,25 @@ function renderWorkers(summary) {
 function slotMatches(slot) {
     const worker = state.workerById.get(slot.workerId);
     const status = worker && worker.online === false ? "offline" : normalizedStatus(slot);
+    const playerCount = Number(slot.playerCount) || 0;
     if (
         state.slotStatus === "available" &&
-        (slot.leasedTo || Number(slot.playerCount) > 0)
+        (
+            slot.leasedTo ||
+            playerCount > 0 ||
+            status === "failed" ||
+            status === "offline"
+        )
     ) {
         return false;
     }
-    if (state.slotStatus === "busy" && status !== "busy") {
+    if (state.slotStatus === "busy" && playerCount === 0) {
         return false;
     }
-    if (state.slotStatus === "leased" && status !== "leased") {
+    if (
+        state.slotStatus === "leased" &&
+        (!slot.leasedTo || playerCount > 0)
+    ) {
         return false;
     }
     if (
@@ -430,10 +434,10 @@ function renderDashboard(data) {
 
     elements.statTotal.textContent = summary.total;
     elements.statAvailable.textContent = summary.available;
-    elements.statPlayers.textContent = summary.players;
+    elements.statPlayers.textContent = summary.inUse;
     elements.statPlayersFoot.textContent =
-        summary.players > 0
-            ? `${summary.inUse} 条线路正在使用`
+        summary.inUse > 0
+            ? `${summary.players} 位用户正在使用`
             : "当前没有用户连接";
     elements.statLeased.textContent = summary.leased;
     elements.onlineWorkers.textContent = `${summary.onlineWorkers} / ${summary.workers.length}`;
