@@ -286,6 +286,94 @@ test('Allocator returns a Gateway URL and invalidates its ticket after release',
     assert.equal(releasedTicket.payload.valid, false);
 });
 
+test('Dashboard lease inventory exposes client IP and can release and stop a Slot', async (t) => {
+    const fakeAgent = createFakeAgent();
+    const agentPort = await listen(fakeAgent.server);
+    const allocator = createAllocator(
+        {
+            listenHost: '127.0.0.1',
+            listenPort: 0,
+            apiKey: 'client-token',
+            autoStart: false,
+            stopOnRelease: false,
+            pollIntervalMs: 60_000,
+            connectTimeoutMs: 60_000,
+            workers: [
+                {
+                    id: 'worker-test',
+                    baseUrl: `http://127.0.0.1:${agentPort}`,
+                    token: 'worker-token'
+                }
+            ]
+        },
+        {
+            logger: {
+                log() {},
+                warn() {},
+                error() {}
+            }
+        }
+    );
+
+    t.after(async () => {
+        await allocator.close();
+        await new Promise((resolve) => fakeAgent.server.close(resolve));
+    });
+
+    const address = await allocator.listen();
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const headers = {
+        'Content-Type': 'application/json',
+        'X-API-Key': 'client-token',
+        'X-Forwarded-For': '203.0.113.24'
+    };
+    const allocation = await requestJson(`${baseUrl}/api/sessions`, {
+        method: 'POST',
+        headers,
+        body: '{}'
+    });
+    assert.equal(allocation.response.status, 201);
+
+    const inventory = await requestJson(`${baseUrl}/api/slots`, { headers });
+    const leasedSlot = inventory.payload.slots.find(
+        (slot) => slot.id === allocation.payload.slotId
+    );
+    assert.equal(leasedSlot.leasedTo, allocation.payload.sessionId);
+    assert.equal(leasedSlot.lease.clientAddress, '203.0.113.24');
+    assert.equal(leasedSlot.lease.status, 'ready');
+    assert.ok(Date.parse(leasedSlot.lease.deadline) > Date.now());
+
+    const unauthorized = await requestJson(
+        `${baseUrl}/api/slots/worker-test/${leasedSlot.id}/release`,
+        {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: '{}'
+        }
+    );
+    assert.equal(unauthorized.response.status, 401);
+
+    const released = await requestJson(
+        `${baseUrl}/api/slots/worker-test/${leasedSlot.id}/release`,
+        {
+            method: 'POST',
+            headers,
+            body: '{}'
+        }
+    );
+    assert.equal(released.response.status, 200);
+    assert.equal(released.payload.released, true);
+    assert.equal(released.payload.session.status, 'released');
+    assert.equal(released.payload.session.reason, 'dashboard_release');
+    assert.equal(fakeAgent.slots.get(leasedSlot.id).status, 'stopped');
+
+    const afterRelease = await requestJson(`${baseUrl}/api/slots`, { headers });
+    assert.equal(
+        afterRelease.payload.slots.find((slot) => slot.id === leasedSlot.id).lease,
+        null
+    );
+});
+
 test('No-capacity responses can be retried with the same idempotency key', async (t) => {
     const fakeAgent = createFakeAgent();
     const agentPort = await listen(fakeAgent.server);
@@ -493,6 +581,8 @@ test('Allocator reserves warm capacity, starts a cold slot, and releases disconn
     assert.match(dashboardHtml, /已有用户连接的线路数量/);
     assert.match(dashboardHtml, /class="metric-label">已预约/);
     assert.doesNotMatch(dashboardHtml, /活跃 Player/);
+    assert.match(dashboardHtml, /已预约客户/);
+    assert.match(dashboardHtml, /id="reservedList"/);
     assert.match(dashboardHtml, /id="bootLayer"/);
     assert.match(dashboardHtml, /class="auth-layer hidden" id="authLayer"/);
     assert.match(
@@ -506,6 +596,8 @@ test('Allocator reserves warm capacity, starts a cold slot, and releases disconn
     assert.match(dashboardScriptText, /REFRESH_INTERVAL_MS = 3000/);
     assert.match(dashboardScriptText, /正在验证已保存的会话/);
     assert.match(dashboardScriptText, /slotDescription/);
+    assert.match(dashboardScriptText, /releaseReservation/);
+    assert.match(dashboardScriptText, /updateReservationCountdowns/);
 
     const dashboardRedirect = await fetch(`${baseUrl}/dashboard`, {
         redirect: 'manual'

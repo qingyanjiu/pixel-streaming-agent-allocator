@@ -27,6 +27,9 @@ const elements = {
     statAvailable: document.getElementById("statAvailable"),
     statPlayers: document.getElementById("statPlayers"),
     statLeased: document.getElementById("statLeased"),
+    reservedSummary: document.getElementById("reservedSummary"),
+    reservedList: document.getElementById("reservedList"),
+    reservedEmpty: document.getElementById("reservedEmpty"),
     noticeBanner: document.getElementById("noticeBanner"),
     workerSummary: document.getElementById("workerSummary"),
     workerRows: document.getElementById("workerRows"),
@@ -78,6 +81,27 @@ function formatTime(value) {
         second: "2-digit",
         hour12: false
     }).format(date);
+}
+
+function formatRemaining(value) {
+    if (!value) {
+        return "—";
+    }
+    const deadline = new Date(value).getTime();
+    if (Number.isNaN(deadline)) {
+        return "—";
+    }
+    const remainingSeconds = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+    if (remainingSeconds === 0) {
+        return "即将释放";
+    }
+    const hours = Math.floor(remainingSeconds / 3600);
+    const minutes = Math.floor((remainingSeconds % 3600) / 60);
+    const seconds = remainingSeconds % 60;
+    if (hours > 0) {
+        return `${hours} 小时 ${minutes} 分`;
+    }
+    return `${minutes} 分 ${String(seconds).padStart(2, "0")} 秒`;
 }
 
 function formatRelative(value) {
@@ -162,9 +186,11 @@ function setConnectionState(mode, label) {
     elements.liveLabel.textContent = label;
 }
 
-function showToast(message) {
+function showToast(message, type = "error") {
     window.clearTimeout(toastTimer);
     elements.toast.textContent = message;
+    elements.toast.classList.remove("toast-success", "toast-error");
+    elements.toast.classList.add(type === "success" ? "toast-success" : "toast-error");
     elements.toast.classList.remove("hidden");
     toastTimer = window.setTimeout(() => elements.toast.classList.add("hidden"), 5000);
 }
@@ -212,6 +238,10 @@ async function fetchSlots() {
         return body;
     } finally {
         window.clearTimeout(timeout);
+        if (button.isConnected) {
+            button.disabled = false;
+            button.textContent = "释放并停止";
+        }
     }
 }
 
@@ -305,6 +335,109 @@ function renderWorkers(summary) {
         ? currentWorker
         : "all";
     state.workerId = elements.workerFilter.value;
+}
+
+function reservationStatusLabel(status) {
+    return {
+        starting: "启动中",
+        ready: "等待连接",
+        disconnected: "等待重连",
+        active: "已连接"
+    }[status] || statusLabel(status);
+}
+
+function updateReservationCountdowns() {
+    for (const item of elements.reservedList.querySelectorAll("[data-deadline]")) {
+        item.textContent = formatRemaining(item.dataset.deadline);
+    }
+}
+
+function renderReservations(summary) {
+    const reservations = summary.slots.filter(
+        (slot) => slot.lease && Number(slot.playerCount) === 0
+    );
+    elements.reservedSummary.textContent = `${reservations.length} 条`;
+    elements.reservedList.innerHTML = reservations
+        .map(
+            (slot) => `
+                <article class="reserved-item">
+                    <div class="reserved-resource">
+                        <strong>${escapeHtml(slot.workerId)} / ${escapeHtml(slot.id)}</strong>
+                        <span class="status-badge ${statusClass(slot.lease.status)}">${escapeHtml(reservationStatusLabel(slot.lease.status))}</span>
+                    </div>
+                    <div class="reserved-detail">
+                        <span>预约 IP</span>
+                        <strong class="mono">${escapeHtml(slot.lease.clientAddress || "未知")}</strong>
+                    </div>
+                    <div class="reserved-detail">
+                        <span>剩余时间</span>
+                        <strong
+                            class="reserved-time"
+                            data-deadline="${escapeHtml(slot.lease.deadline)}"
+                            title="截止 ${escapeHtml(slot.lease.deadline)}"
+                        >${escapeHtml(formatRemaining(slot.lease.deadline))}</strong>
+                    </div>
+                    <button
+                        class="release-button"
+                        type="button"
+                        data-release-worker="${escapeHtml(slot.workerId)}"
+                        data-release-slot="${escapeHtml(slot.id)}"
+                    >释放并停止</button>
+                </article>
+            `
+        )
+        .join("");
+    elements.reservedEmpty.classList.toggle("hidden", reservations.length > 0);
+}
+
+async function releaseReservation(button) {
+    const workerId = button.dataset.releaseWorker;
+    const slotId = button.dataset.releaseSlot;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 35_000);
+    button.disabled = true;
+    button.textContent = "正在停止...";
+    try {
+        const response = await fetch(
+            `/api/slots/${encodeURIComponent(workerId)}/${encodeURIComponent(slotId)}/release`,
+            {
+                method: "POST",
+                headers: {
+                    Accept: "application/json",
+                    "Content-Type": "application/json",
+                    "X-API-Key": state.apiKey
+                },
+                body: "{}",
+                cache: "no-store",
+                signal: controller.signal
+            }
+        );
+        const body = await response.json().catch(() => ({}));
+        if (response.status === 401) {
+            throw Object.assign(new Error("Client API Key 无效"), { code: 401 });
+        }
+        if (!response.ok) {
+            throw new Error(body.error || `HTTP ${response.status}`);
+        }
+        showToast(`已释放 ${workerId}/${slotId} 并停止线路`, "success");
+        await refreshDashboard({ silent: true });
+    } catch (error) {
+        if (error.code === 401) {
+            sessionStorage.removeItem(API_KEY_STORAGE);
+            state.apiKey = "";
+            showAuth("API Key 无效，请重新输入。");
+            return;
+        }
+        const message =
+            error.name === "AbortError"
+                ? "释放超时，请刷新后检查线路状态"
+                : `释放失败：${error.message}`;
+        showToast(message);
+        button.disabled = false;
+        button.textContent = "释放并停止";
+    } finally {
+        window.clearTimeout(timeout);
+    }
 }
 
 function slotMatches(slot) {
@@ -447,6 +580,7 @@ function renderDashboard(data) {
     elements.footerSync.textContent = `最近同步 ${formatTime(state.lastUpdatedAt.toISOString())}`;
 
     renderWorkers(summary);
+    renderReservations(summary);
     renderSlots(summary);
     renderNotice(summary);
 }
@@ -548,6 +682,13 @@ elements.statusFilters.addEventListener("click", (event) => {
     }
 });
 
+elements.reservedList.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-release-worker]");
+    if (button) {
+        void releaseReservation(button);
+    }
+});
+
 elements.workerFilter.addEventListener("change", () => {
     state.workerId = elements.workerFilter.value;
     if (state.data) {
@@ -577,6 +718,7 @@ window.setInterval(() => {
         second: "2-digit",
         hour12: false
     }).format(new Date());
+    updateReservationCountdowns();
 }, 1000);
 
 scheduleRefresh();

@@ -639,6 +639,7 @@ button {
     gap: 18px;
 }
 
+.reservation-panel,
 .worker-panel,
 .distribution-panel,
 .slot-panel {
@@ -849,6 +850,82 @@ tbody tr:last-child td {
     font-size: 11px;
     text-align: right;
     font-variant-numeric: tabular-nums;
+}
+
+.reserved-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.reserved-item {
+    display: grid;
+    grid-template-columns: minmax(180px, 1.2fr) minmax(150px, 0.8fr) minmax(130px, 0.7fr) auto;
+    align-items: center;
+    gap: 18px;
+    padding: 15px 16px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: rgba(6, 16, 27, 0.42);
+}
+
+.reserved-resource,
+.reserved-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.reserved-resource {
+    align-items: flex-start;
+}
+
+.reserved-resource strong {
+    color: var(--text);
+    font-size: 13px;
+}
+
+.reserved-detail span {
+    color: var(--faint);
+    font-size: 9px;
+    letter-spacing: 0.1em;
+}
+
+.reserved-detail strong {
+    color: #d3e2ee;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.reserved-time {
+    color: var(--amber) !important;
+    font-variant-numeric: tabular-nums;
+}
+
+.release-button {
+    min-height: 36px;
+    padding: 0 14px;
+    border: 1px solid rgba(255, 113, 130, 0.35);
+    border-radius: 10px;
+    background: var(--red-soft);
+    color: #ffd4da;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: border-color 150ms ease, background 150ms ease, transform 150ms ease;
+}
+
+.release-button:hover {
+    border-color: rgba(255, 113, 130, 0.7);
+    background: rgba(255, 113, 130, 0.2);
+    transform: translateY(-1px);
+}
+
+.release-button:disabled {
+    cursor: wait;
+    opacity: 0.6;
+    transform: none;
 }
 
 .slot-actions {
@@ -1065,6 +1142,12 @@ tbody tr:last-child td {
     font-size: 12px;
 }
 
+.toast.toast-success {
+    border-color: rgba(81, 225, 179, 0.3);
+    background: rgba(12, 53, 43, 0.97);
+    color: #c9fff0;
+}
+
 @media (max-width: 1240px) {
     .metric-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1119,10 +1202,20 @@ tbody tr:last-child td {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
+    .reservation-panel,
     .worker-panel,
     .distribution-panel,
     .slot-panel {
         padding: 18px;
+    }
+
+    .reserved-item {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+    }
+
+    .release-button {
+        grid-column: 1 / -1;
     }
 
     .slot-heading,

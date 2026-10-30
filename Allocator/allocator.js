@@ -267,6 +267,45 @@ function createAllocator(config, options = {}) {
             : null;
     }
 
+    function getLeaseSession(slot) {
+        const sessionId = slotLeases.get(slotKey(slot.workerId, slot.id));
+        return sessionId ? sessions.get(sessionId) || null : null;
+    }
+
+    function normalizeClientAddress(value) {
+        if (!value) {
+            return null;
+        }
+        const address = String(value);
+        if (address.startsWith('::ffff:')) {
+            return address.slice('::ffff:'.length);
+        }
+        if (address === '::1') {
+            return '127.0.0.1';
+        }
+        return address;
+    }
+
+    function serializeLease(session) {
+        if (!session) {
+            return null;
+        }
+        let deadline = session.expiresAt;
+        if (session.status === 'disconnected' && session.reconnectDeadline) {
+            deadline = session.reconnectDeadline;
+        } else if (['starting', 'ready'].includes(session.status)) {
+            deadline = session.reservedAt + settings.connectTimeoutMs;
+        }
+        return {
+            sessionId: session.id,
+            status: session.status,
+            clientAddress: normalizeClientAddress(session.clientAddress),
+            reservedAt: new Date(session.reservedAt).toISOString(),
+            expiresAt: new Date(session.expiresAt).toISOString(),
+            deadline: new Date(Math.min(deadline, session.expiresAt)).toISOString()
+        };
+    }
+
     function slotIsLeased(slot) {
         return slotLeases.has(slotKey(slot.workerId, slot.id));
     }
@@ -466,8 +505,8 @@ function createAllocator(config, options = {}) {
         }
     }
 
-    async function stopSessionSlot(session) {
-        if (!settings.stopOnRelease || !session.workerId || !session.slotId) {
+    async function stopSessionSlot(session, forceStop = false) {
+        if ((!settings.stopOnRelease && !forceStop) || !session.workerId || !session.slotId) {
             releaseLease(session);
             return;
         }
@@ -494,7 +533,7 @@ function createAllocator(config, options = {}) {
         }
     }
 
-    async function releaseSession(session, reason, stopSlot) {
+    async function releaseSession(session, reason, stopSlot, forceStop = false) {
         if (['released', 'failed'].includes(session.status) || session.releasing) {
             return;
         }
@@ -504,7 +543,7 @@ function createAllocator(config, options = {}) {
         setSessionStatus(session, 'released', { reason });
         try {
             if (stopSlot) {
-                await stopSessionSlot(session);
+                await stopSessionSlot(session, forceStop);
             } else {
                 releaseLease(session);
             }
@@ -924,10 +963,45 @@ function createAllocator(config, options = {}) {
                         lastSeenAt: worker.lastSeenAt,
                         lastError: worker.lastError
                     })),
-                    slots: allSlots().map((slot) => ({
-                        ...slot,
-                        leasedTo: slotLeases.get(slot.key) || null
-                    }))
+                    slots: allSlots().map((slot) => {
+                        const leaseSession = getLeaseSession(slot);
+                        return {
+                            ...slot,
+                            leasedTo: leaseSession?.id || null,
+                            lease: serializeLease(leaseSession)
+                        };
+                    })
+                });
+                return;
+            }
+
+            const slotReleaseMatch = url.pathname.match(
+                /^\/api\/slots\/([^/]+)\/([^/]+)\/release$/
+            );
+            if (request.method === 'POST' && slotReleaseMatch) {
+                const workerId = decodeURIComponent(slotReleaseMatch[1]);
+                const slotId = decodeURIComponent(slotReleaseMatch[2]);
+                const key = slotKey(workerId, slotId);
+                const sessionId = slotLeases.get(key);
+                const session = sessionId ? sessions.get(sessionId) : null;
+                if (!session) {
+                    sendJson(response, 404, { error: 'active_lease_not_found' });
+                    return;
+                }
+                logEvent('dashboard_release_request', {
+                    session: session.id,
+                    client: clientAddress,
+                    worker: workerId,
+                    slot: slotId
+                });
+                await withAllocationLock(() =>
+                    releaseSession(session, 'dashboard_release', true, true)
+                );
+                sendJson(response, 200, {
+                    released: true,
+                    workerId,
+                    slotId,
+                    session: serializeSession(session)
                 });
                 return;
             }
