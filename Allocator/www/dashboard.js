@@ -478,11 +478,12 @@ function renderSlots(summary) {
         const worker = state.workerById.get(slot.workerId);
         const status = worker && worker.online === false ? "offline" : normalizedStatus(slot);
         const playerCount = Number(slot.playerCount) || 0;
-        const isReservation = Boolean(slot.lease) && playerCount === 0;
-        const detailMarkup = isReservation
+        const hasLease = Boolean(slot.lease);
+        const isReservation = hasLease && playerCount === 0;
+        const detailMarkup = hasLease
             ? `
                 <div class="reservation-summary">
-                    <span>IP <strong class="mono">${escapeHtml(slot.lease.clientAddress || "未知")}</strong></span>
+                    <span>客户 IP <strong class="mono">${escapeHtml(slot.lease.clientAddress || "未知")}</strong></span>
                     <span>剩余 <strong class="reserved-time" data-deadline="${escapeHtml(slot.lease.deadline)}">${escapeHtml(formatRemaining(slot.lease.deadline))}</strong></span>
                 </div>
             `
