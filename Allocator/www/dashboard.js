@@ -259,7 +259,7 @@ function calculateSummary(data) {
             inUse += 1;
         } else if (slot.leasedTo) {
             leased += 1;
-        } else {
+        } else if (slot.status === "stopped") {
             available += 1;
         }
     }
@@ -287,7 +287,10 @@ function renderWorkers(summary) {
     for (const worker of summary.workers) {
         const workerSlots = summary.slots.filter((slot) => slot.workerId === worker.id);
         const availableSlots = workerSlots.filter(
-            (slot) => Number(slot.playerCount) === 0 && !slot.leasedTo
+            (slot) =>
+                slot.status === "stopped" &&
+                Number(slot.playerCount) === 0 &&
+                !slot.leasedTo
         ).length;
         const players = workerSlots.reduce(
             (sum, slot) => sum + (Number(slot.playerCount) || 0),
@@ -397,10 +400,9 @@ function slotMatches(slot) {
     if (
         state.slotStatus === "available" &&
         (
+            status !== "stopped" ||
             slot.leasedTo ||
-            playerCount > 0 ||
-            status === "failed" ||
-            status === "offline"
+            playerCount > 0
         )
     ) {
         return false;
