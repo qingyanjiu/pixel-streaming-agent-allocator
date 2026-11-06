@@ -1,5 +1,5 @@
 {
-  "agentId": "worker01",
+  "agentId": "worker02",
   "listenHost": "0.0.0.0",
   "listenPort": 9101,
   "authToken": "replace-with-a-unique-worker-token",
