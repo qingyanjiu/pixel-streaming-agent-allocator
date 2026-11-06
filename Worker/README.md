@@ -181,17 +181,21 @@ POST /processes/ue/{pid}/terminate
 
 ## Allocator 控制面白名单
 
-Worker 配置支持：
+Worker 与 Gateway 同机部署时，Worker 会自动读取：
 
-```json
-"allowedAllocatorIps": [
-  "192.168.1.96",
-  "127.0.0.1",
-  "::1"
-]
+```text
+Gateway\gateway.json
 ```
 
-该白名单只限制需要认证的管理接口，`/health` 仍可用于连通性检查。建议只填写中央 Allocator IP，以及本机运维脚本使用的回环地址。空数组表示不限制来源，不适合多 Allocator 环境。
+其中 `allocatorUrl` 的主机 IP 自动成为管理接口白名单，并额外允许本机 `127.0.0.1`、`::1` 供运维脚本使用。不需要在 Worker 中重复填写 Allocator IP。
+
+如果 Gateway 配置不在默认相对位置，可以在 Worker 配置中增加：
+
+```json
+"gatewayConfigFile": "../Gateway/gateway.json"
+```
+
+该白名单只限制需要认证的管理接口，`/health` 仍可用于连通性检查。修改 Gateway 的 `allocatorUrl` 后需要重启 Worker Agent 才会重新加载白名单。
 
 Allocator 同时会校验 Worker 返回的 `agentId`。即使某台 Allocator 能访问 Worker，只要 `agentId` 与 `workers.json` 中的 `id` 不一致，就会把该 Worker 标记为身份不匹配并忽略。
 

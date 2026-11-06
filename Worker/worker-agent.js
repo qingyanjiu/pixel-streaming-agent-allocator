@@ -332,11 +332,50 @@ function createWorkerAgent(config, options = {}) {
     const stopTimeoutMs = config.stopTimeoutMs || DEFAULT_STOP_TIMEOUT_MS;
     const localHost = config.localHost || '127.0.0.1';
     const logger = options.logger || console;
-    const allowedAllocatorIps = new Set(
-        (config.allowedAllocatorIps || []).map((address) =>
-            normalizeIpAddress(address)
-        )
+    const configuredAllocatorIps = (config.allowedAllocatorIps || []).map(
+        (address) => normalizeIpAddress(address)
     );
+    let allowedAllocatorIps = new Set(configuredAllocatorIps);
+    if (allowedAllocatorIps.size === 0) {
+        const gatewayConfigFile = config.gatewayConfigFile
+            ? resolveFrom(resolvedPaths.configDirectory, config.gatewayConfigFile)
+            : resolveFrom(
+                  resolvedPaths.configDirectory,
+                  path.join('..', 'Gateway', 'gateway.json')
+              );
+        if (fs.existsSync(gatewayConfigFile)) {
+            let gatewayConfig;
+            try {
+                gatewayConfig = JSON.parse(
+                    fs.readFileSync(gatewayConfigFile, 'utf8')
+                );
+            } catch (error) {
+                throw new Error(
+                    `Cannot parse Gateway config "${gatewayConfigFile}": ${error.message}`
+                );
+            }
+            let allocatorUrl;
+            try {
+                allocatorUrl = new URL(gatewayConfig.allocatorUrl);
+            } catch {
+                throw new Error(
+                    `Gateway config "${gatewayConfigFile}" requires a valid allocatorUrl.`
+                );
+            }
+            allowedAllocatorIps = new Set([
+                normalizeIpAddress(allocatorUrl.hostname),
+                '127.0.0.1',
+                '::1'
+            ]);
+            logger.log(
+                `[worker] ${new Date().toISOString()} event=allocator_allowlist_source worker=${config.agentId} file=${gatewayConfigFile} allocator=${allocatorUrl.hostname}`
+            );
+        } else {
+            logger.warn(
+                `Gateway config not found for Allocator IP filtering: ${gatewayConfigFile}`
+            );
+        }
+    }
     const processLister =
         options.listUeProcesses ||
         (() => listUeProcessesOnHost(gameExecutable));
@@ -1041,6 +1080,9 @@ function createWorkerAgent(config, options = {}) {
         stopSlot,
         refreshSlot,
         listUeProcesses,
+        getAllowedAllocatorIps() {
+            return Array.from(allowedAllocatorIps);
+        },
         close,
         listen() {
             return new Promise((resolve, reject) => {

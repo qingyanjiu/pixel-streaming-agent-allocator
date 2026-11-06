@@ -257,7 +257,7 @@ test('Worker path resolution keeps Windows and WebServers directories independen
     );
 });
 
-test('Worker rejects management calls from Allocator IPs outside the allowlist', async (t) => {
+test('Worker derives Allocator IP allowlist from Gateway config', async (t) => {
     const [agentPort, streamerPort, playerPort, sfuPort] = await Promise.all([
         getFreePort(),
         getFreePort(),
@@ -265,13 +265,21 @@ test('Worker rejects management calls from Allocator IPs outside the allowlist',
         getFreePort()
     ]);
     const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'ps-worker-ip-'));
+    const gatewayDirectory = path.join(temporaryDirectory, 'Gateway');
+    fs.mkdirSync(gatewayDirectory, { recursive: true });
+    fs.writeFileSync(
+        path.join(gatewayDirectory, 'gateway.json'),
+        JSON.stringify({
+            allocatorUrl: 'http://203.0.113.10:9200'
+        })
+    );
     const agent = createWorkerAgent(
         {
             agentId: 'allowed-worker',
             listenHost: '127.0.0.1',
             listenPort: agentPort,
             authToken: 'test-token',
-            allowedAllocatorIps: ['203.0.113.10'],
+            gatewayConfigFile: 'Gateway/gateway.json',
             windowsDirectory: repositoryRoot,
             webServersDirectory: path.join(__dirname, 'fixtures'),
             nodeExecutable: process.execPath,
@@ -306,13 +314,13 @@ test('Worker rejects management calls from Allocator IPs outside the allowlist',
     await agent.listen();
     const health = await fetch(`http://127.0.0.1:${agentPort}/health`);
     assert.equal(health.status, 200);
-    const rejected = await fetch(`http://127.0.0.1:${agentPort}/slots`, {
+    const localManagement = await fetch(`http://127.0.0.1:${agentPort}/slots`, {
         headers: {
             Authorization: 'Bearer test-token'
         }
     });
-    assert.equal(rejected.status, 403);
-    assert.deepEqual(await rejected.json(), {
-        error: 'caller_ip_not_allowed'
-    });
+    assert.equal(localManagement.status, 200);
+    assert.ok(agent.getAllowedAllocatorIps().includes('203.0.113.10'));
+    assert.ok(agent.getAllowedAllocatorIps().includes('127.0.0.1'));
+    assert.equal(agent.getAllowedAllocatorIps().includes('192.168.1.188'), false);
 });
