@@ -6,6 +6,8 @@ Gateway 与 Windows 游戏构建、WebServers 和 Worker Agent 部署在同一�
 
 多台机器的完整安装步骤见 [部署文档](../Docs/部署文档.md)。
 
+每个字段的详细说明见 [配置项完整说明](../Docs/配置项完整说明.md)。
+
 ## 职责
 
 ```text

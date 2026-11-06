@@ -136,6 +136,7 @@ Gateway\gateway.json
 - [架构说明](Docs/架构说明.md)
 - [Gateway 网关说明](Docs/Gateway网关说明.md)
 - [完整部署文档](Docs/部署文档.md)
+- [配置项完整说明](Docs/配置项完整说明.md)
 - [认证与密钥说明](Docs/认证与密钥说明.md)
 - [客户端连接像素流说明](Docs/客户端连接像素流说明.md)
 - [调试与日志说明](Docs/调试与日志说明.md)
