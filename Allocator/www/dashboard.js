@@ -357,20 +357,37 @@ function renderWorkers(summary) {
 }
 
 function renderUeProcesses(data) {
-    const processes = (data.ueProcesses || []).slice().sort((left, right) => {
-        if (left.managed !== right.managed) {
-            return left.managed ? 1 : -1;
+    const processGroups = new Map();
+    for (const processInfo of data.ueProcesses || []) {
+        const rootPid = processInfo.rootPid || processInfo.pid;
+        if (!processGroups.has(rootPid)) {
+            processGroups.set(rootPid, []);
         }
-        return left.pid - right.pid;
-    });
+        processGroups.get(rootPid).push(processInfo);
+    }
+    const instances = Array.from(processGroups.values())
+        .map((members) => ({
+            main:
+                members.find((processInfo) => processInfo.processRole === "main") ||
+                members[0],
+            members
+        }))
+        .sort((left, right) => {
+            if (left.main.managed !== right.main.managed) {
+                return left.main.managed ? 1 : -1;
+            }
+            return left.main.pid - right.main.pid;
+        });
     const errors = data.ueProcessErrors || [];
-    const unmanagedCount = processes.filter((processInfo) => !processInfo.managed).length;
+    const unmanagedCount = instances.filter(
+        (instance) => !instance.main.managed
+    ).length;
     const alert = unmanagedCount > 0 || errors.length > 0;
     elements.ueProcessPanel.classList.toggle("has-alert", alert);
     elements.ueProcessSummary.textContent =
-        processes.length > 0
-            ? `${processes.length} 个进程${unmanagedCount > 0 ? ` · ${unmanagedCount} 个异常` : ""}`
-            : "0 个进程";
+        instances.length > 0
+            ? `${instances.length} 个实例${unmanagedCount > 0 ? ` · ${unmanagedCount} 个异常` : ""}`
+            : "0 个实例";
     elements.ueProcessList.innerHTML = [
         ...errors.map(
             (item) => `
@@ -380,8 +397,11 @@ function renderUeProcesses(data) {
                 </div>
             `
         ),
-        ...processes.map((processInfo) => {
+        ...instances.map(({ main: processInfo, members }) => {
             const managed = processInfo.managed === true;
+            const childPids = members
+                .filter((member) => member.pid !== processInfo.pid)
+                .map((member) => member.pid);
             return `
                 <article class="ue-process-item ${managed ? "managed" : "unmanaged"}">
                     <div class="process-state">
@@ -395,6 +415,7 @@ function renderUeProcesses(data) {
                     <div class="process-field">
                         <span>UE PID</span>
                         <strong class="mono process-pid">${escapeHtml(processInfo.pid)}</strong>
+                        ${childPids.length > 0 ? `<small class="process-children">子进程 ${escapeHtml(childPids.join(", "))}</small>` : ""}
                     </div>
                     <div class="process-field process-owner">
                         <span>${managed ? "所属线路" : "状态"}</span>
@@ -423,7 +444,7 @@ function renderUeProcesses(data) {
     ].join("");
     elements.ueProcessEmpty.classList.toggle(
         "hidden",
-        processes.length + errors.length > 0
+        instances.length + errors.length > 0
     );
 }
 

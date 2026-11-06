@@ -177,7 +177,7 @@ GET  /processes/ue
 POST /processes/ue/{pid}/terminate
 ```
 
-列表会标记每个 UE PID 是否绑定当前 Worker 的 Slot。终止接口只允许关闭未绑定 Slot 的进程；已绑定进程返回 `409`，防止误杀正在使用的线路。
+Worker 会按父子 PID 识别 UE 启动器及其 `Binaries\Win64` 子进程，并把同一进程树标记为一个实例。终止接口只允许关闭未绑定 Slot 的完整进程树；已绑定进程返回 `409`，防止误杀正在使用的线路。
 
 ## Allocator 控制面白名单
 

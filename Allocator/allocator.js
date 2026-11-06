@@ -276,6 +276,20 @@ function createAllocator(config, options = {}) {
             })
         );
         const processes = results.flatMap((result) => result.processes);
+        const instanceIds = new Set(
+            processes.map(
+                (processInfo) =>
+                    processInfo.rootPid || processInfo.pid
+            )
+        );
+        const unmanagedInstanceIds = new Set(
+            processes
+                .filter((processInfo) => !processInfo.managed)
+                .map(
+                    (processInfo) =>
+                        processInfo.rootPid || processInfo.pid
+                )
+        );
         const errors = results
             .filter((result) => result.error)
             .map((result) => ({
@@ -283,18 +297,34 @@ function createAllocator(config, options = {}) {
                 error: result.error
             }));
         const alertWorkers = results
-            .filter(
-                (result) =>
+            .filter((result) => {
+                const roots = new Set(
+                    result.processes.map(
+                        (processInfo) =>
+                            processInfo.rootPid || processInfo.pid
+                    )
+                );
+                const unmanagedRoots = new Set(
+                    result.processes
+                        .filter((processInfo) => !processInfo.managed)
+                        .map(
+                            (processInfo) =>
+                                processInfo.rootPid || processInfo.pid
+                        )
+                );
+                return (
                     result.error ||
-                    result.processes.some((processInfo) => !processInfo.managed) ||
-                    result.processes.length > result.configuredSlotCount
-            )
+                    unmanagedRoots.size > 0 ||
+                    roots.size > result.configuredSlotCount
+                );
+            })
             .map((result) => result.worker.id);
         return {
             processes,
             errors,
             alertWorkers,
-            unmanagedCount: processes.filter((processInfo) => !processInfo.managed).length
+            instanceCount: instanceIds.size,
+            unmanagedCount: unmanagedInstanceIds.size
         };
     }
 
@@ -1033,6 +1063,7 @@ function createAllocator(config, options = {}) {
                     ueProcesses: processInventory.processes,
                     ueProcessErrors: processInventory.errors,
                     ueProcessAlertWorkers: processInventory.alertWorkers,
+                    ueProcessInstanceCount: processInventory.instanceCount,
                     unmanagedUeProcessCount: processInventory.unmanagedCount
                 });
                 return;

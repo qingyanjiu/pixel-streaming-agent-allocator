@@ -990,6 +990,13 @@ tbody tr:last-child td {
     color: var(--blue) !important;
 }
 
+.process-children {
+    color: var(--faint);
+    font-family: "Cascadia Mono", "Consolas", monospace;
+    font-size: 9px;
+    white-space: nowrap;
+}
+
 .process-path {
     overflow: hidden;
     color: var(--faint);

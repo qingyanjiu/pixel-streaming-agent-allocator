@@ -69,14 +69,40 @@ function createFakeAgent() {
                             processName: 'UE_ANDA.exe',
                             executablePath: 'D:/GameBuilds/Windows/UE_ANDA.exe',
                             managed: true,
-                            slotId: 'T1'
+                            slotId: 'T1',
+                            rootPid: 4100,
+                            processRole: 'main'
+                        },
+                        {
+                            pid: 4101,
+                            parentPid: 4100,
+                            processName: 'UE_ANDA.exe',
+                            executablePath:
+                                'D:/GameBuilds/Windows/UE_ANDA/Binaries/Win64/UE_ANDA.exe',
+                            managed: true,
+                            slotId: 'T1',
+                            rootPid: 4100,
+                            processRole: 'child'
                         },
                         {
                             pid: 99999,
                             processName: 'UE_ANDA.exe',
                             executablePath: 'D:/GameBuilds/Windows/UE_ANDA.exe',
                             managed: false,
-                            slotId: null
+                            slotId: null,
+                            rootPid: 99999,
+                            processRole: 'main'
+                        },
+                        {
+                            pid: 99998,
+                            parentPid: 99999,
+                            processName: 'UE_ANDA.exe',
+                            executablePath:
+                                'D:/GameBuilds/Windows/UE_ANDA/Binaries/Win64/UE_ANDA.exe',
+                            managed: false,
+                            slotId: null,
+                            rootPid: 99999,
+                            processRole: 'child'
                         }
                     ]
                 })
@@ -439,7 +465,8 @@ test('Dashboard lease inventory exposes client IP and can release and stop a Slo
     assert.equal(leasedSlot.lease.clientAddress, '203.0.113.24');
     assert.equal(leasedSlot.lease.status, 'ready');
     assert.ok(Date.parse(leasedSlot.lease.deadline) > Date.now());
-    assert.equal(inventory.payload.ueProcesses.length, 2);
+    assert.equal(inventory.payload.ueProcesses.length, 4);
+    assert.equal(inventory.payload.ueProcessInstanceCount, 2);
     assert.equal(inventory.payload.unmanagedUeProcessCount, 1);
     assert.deepEqual(inventory.payload.ueProcessAlertWorkers, ['worker-test']);
 

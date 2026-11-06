@@ -82,20 +82,38 @@ async function listUeProcessesOnHost(gameExecutable) {
         return [];
     }
     const processName = path.parse(gameExecutable).name.replaceAll("'", "''");
+    const executableName = path.basename(gameExecutable).replaceAll("'", "''");
     const script = [
         `$processName = '${processName}'`,
-        '$items = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -ieq $processName } | ForEach-Object {',
-        '  $executablePath = $null',
-        '  try { $executablePath = $_.Path } catch {}',
-        '  $startTime = $null',
-        "  try { $startTime = $_.StartTime.ToUniversalTime().ToString('o') } catch {}",
-        '  [pscustomobject]@{',
-        '    pid = $_.Id',
-        "    processName = $_.ProcessName + '.exe'",
-        '    executablePath = $executablePath',
-        '    startTime = $startTime',
-        '  }',
-        '})',
+        `$executableName = '${executableName}'`,
+        '$items = @()',
+        'try {',
+        `  $items = @(Get-CimInstance Win32_Process -Filter "Name='$executableName'" -ErrorAction Stop | ForEach-Object {`,
+        '    $startTime = $null',
+        '    try { $startTime = $_.CreationDate.ToUniversalTime().ToString(\'o\') } catch {}',
+        '    [pscustomobject]@{',
+        '      pid = $_.ProcessId',
+        '      parentPid = $_.ParentProcessId',
+        '      processName = $_.Name',
+        '      executablePath = $_.ExecutablePath',
+        '      startTime = $startTime',
+        '    }',
+        '  })',
+        '} catch {',
+        '  $items = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -ieq $processName } | ForEach-Object {',
+        '    $executablePath = $null',
+        '    try { $executablePath = $_.Path } catch {}',
+        '    $startTime = $null',
+        '    try { $startTime = $_.StartTime.ToUniversalTime().ToString(\'o\') } catch {}',
+        '    [pscustomobject]@{',
+        '      pid = $_.Id',
+        '      parentPid = $null',
+        "      processName = $_.ProcessName + '.exe'",
+        '      executablePath = $executablePath',
+        '      startTime = $startTime',
+        '    }',
+        '  })',
+        '}',
         'ConvertTo-Json -InputObject $items -Compress'
     ].join('\n');
     const output = await runPowerShell(script);
@@ -107,6 +125,7 @@ async function listUeProcessesOnHost(gameExecutable) {
     return records
         .map((record) => ({
             pid: Number(record.pid),
+            parentPid: Number(record.parentPid) || null,
             processName: record.processName || `${processName}.exe`,
             executablePath: record.executablePath || null,
             startTime: record.startTime || null
@@ -458,18 +477,63 @@ function createWorkerAgent(config, options = {}) {
 
     async function listUeProcesses(force = false) {
         const records = await processLister();
-        return records.map((record) => {
-            const pid = Number(record.pid);
-            const managedSlot = Array.from(slots.values()).find(
-                (slot) =>
-                    processIsRunning(slot.ueChild) &&
-                    slot.ueChild.pid === pid
-            );
+        const normalized = records.map((record) => ({
+            ...record,
+            pid: Number(record.pid),
+            parentPid: Number(record.parentPid) || null
+        }));
+        const byPid = new Map(normalized.map((record) => [record.pid, record]));
+        const isBinariesChild = (record) =>
+            /[\\/]binaries[\\/]win64[\\/]/i.test(record.executablePath || '');
+        const inferredParent = new Map();
+        for (const record of normalized) {
+            if (record.parentPid && byPid.has(record.parentPid)) {
+                inferredParent.set(record.pid, record.parentPid);
+                continue;
+            }
+            if (!isBinariesChild(record) || !record.startTime) {
+                continue;
+            }
+            const startedAt = new Date(record.startTime).getTime();
+            const candidates = normalized
+                .filter(
+                    (candidate) =>
+                        candidate.pid !== record.pid &&
+                        !isBinariesChild(candidate) &&
+                        candidate.startTime
+                )
+                .map((candidate) => ({
+                    candidate,
+                    delta: Math.abs(new Date(candidate.startTime).getTime() - startedAt)
+                }))
+                .filter((item) => Number.isFinite(item.delta) && item.delta <= 15_000)
+                .sort((left, right) => left.delta - right.delta);
+            if (candidates.length > 0) {
+                inferredParent.set(record.pid, candidates[0].candidate.pid);
+            }
+        }
+        const trackedPids = new Map(
+            Array.from(slots.values())
+                .filter((slot) => processIsRunning(slot.ueChild))
+                .map((slot) => [slot.ueChild.pid, slot.config.id])
+        );
+        return normalized.map((record) => {
+            const chain = [];
+            let currentPid = record.pid;
+            const visited = new Set();
+            while (currentPid && !visited.has(currentPid)) {
+                visited.add(currentPid);
+                chain.push(currentPid);
+                currentPid = inferredParent.get(currentPid);
+            }
+            const rootPid = chain[chain.length - 1];
+            const managedPid = chain.find((pid) => trackedPids.has(pid));
             return {
                 ...record,
-                pid,
-                managed: Boolean(managedSlot),
-                slotId: managedSlot?.config.id || null
+                rootPid,
+                processRole: record.pid === rootPid ? 'main' : 'child',
+                managed: Boolean(managedPid),
+                slotId: managedPid ? trackedPids.get(managedPid) : null
             };
         });
     }
@@ -495,7 +559,20 @@ function createWorkerAgent(config, options = {}) {
             error.slotId = target.slotId;
             throw error;
         }
-        await processTerminator(pid);
+        const processTree = processes.filter(
+            (record) => record.rootPid === target.rootPid
+        );
+        const orderedProcesses = processTree
+            .slice()
+            .sort((left, right) => {
+                if (left.processRole !== right.processRole) {
+                    return left.processRole === "child" ? -1 : 1;
+                }
+                return left.pid - right.pid;
+            });
+        for (const processInfo of orderedProcesses) {
+            await processTerminator(processInfo.pid);
+        }
         logSlotEvent(
             {
                 config: {
@@ -504,10 +581,16 @@ function createWorkerAgent(config, options = {}) {
             },
             'unmanaged_ue_process_terminated',
             {
-                pid
+                pid,
+                pids: orderedProcesses.map((processInfo) => processInfo.pid).join(',')
             }
         );
-        return target;
+        return {
+            ...target,
+            terminatedPids: orderedProcesses.map(
+                (processInfo) => processInfo.pid
+            )
+        };
     }
 
     function saveProcessState() {
@@ -973,7 +1056,8 @@ function createWorkerAgent(config, options = {}) {
                 const processInfo = await terminateUnmanagedUeProcess(pid);
                 sendJson(response, 200, {
                     terminated: true,
-                    pid,
+                    pid: processInfo.rootPid,
+                    terminatedPids: processInfo.terminatedPids,
                     workerId: config.agentId,
                     process: processInfo
                 });

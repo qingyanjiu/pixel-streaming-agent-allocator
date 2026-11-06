@@ -88,20 +88,39 @@ test('Worker Agent starts, reports readiness, observes players, and stops one sl
     agent = createWorkerAgent(config, {
         configPath: path.join(temporaryDirectory, 'worker-test.json'),
         logger,
-        listUeProcesses: async () => [
-            {
-                pid: agent.slots.get('T1').ueChild?.pid || 101,
-                processName: 'node.exe',
-                executablePath: process.execPath,
-                startTime: new Date().toISOString()
-            },
-            {
-                pid: 99999,
-                processName: 'UE_ANDA.exe',
-                executablePath: 'D:/GameBuilds/Windows/UE_ANDA.exe',
-                startTime: new Date().toISOString()
-            }
-        ],
+        listUeProcesses: async () => {
+            const managedPid = agent.slots.get('T1').ueChild?.pid || 101;
+            return [
+                {
+                    pid: managedPid,
+                    processName: 'node.exe',
+                    executablePath: process.execPath,
+                    startTime: new Date().toISOString()
+                },
+                {
+                    pid: managedPid + 1,
+                    parentPid: managedPid,
+                    processName: 'UE_ANDA.exe',
+                    executablePath:
+                        'D:/GameBuilds/Windows/UE_ANDA/Binaries/Win64/UE_ANDA.exe',
+                    startTime: new Date().toISOString()
+                },
+                {
+                    pid: 99999,
+                    processName: 'UE_ANDA.exe',
+                    executablePath: 'D:/GameBuilds/Windows/UE_ANDA.exe',
+                    startTime: new Date().toISOString()
+                },
+                {
+                    pid: 99998,
+                    parentPid: 99999,
+                    processName: 'UE_ANDA.exe',
+                    executablePath:
+                        'D:/GameBuilds/Windows/UE_ANDA/Binaries/Win64/UE_ANDA.exe',
+                    startTime: new Date().toISOString()
+                }
+            ];
+        },
         terminateUeProcess: async (pid) => {
             terminatedPids.push(pid);
         }
@@ -136,10 +155,22 @@ test('Worker Agent starts, reports readiness, observes players, and stops one sl
         { headers: authHeaders }
     );
     assert.equal(processInventory.configuredSlotCount, 1);
-    assert.equal(processInventory.processes.length, 2);
+    assert.equal(processInventory.processes.length, 4);
     assert.equal(
         processInventory.processes.find((process) => process.pid === started.pids.ue).slotId,
         'T1'
+    );
+    assert.equal(
+        processInventory.processes.find(
+            (process) => process.pid === started.pids.ue + 1
+        ).slotId,
+        'T1'
+    );
+    assert.equal(
+        processInventory.processes.find(
+            (process) => process.pid === started.pids.ue + 1
+        ).processRole,
+        'child'
     );
     assert.equal(
         processInventory.processes.find((process) => process.pid === 99999).managed,
@@ -157,7 +188,8 @@ test('Worker Agent starts, reports readiness, observes players, and stops one sl
         { method: 'POST', headers: authHeaders }
     );
     assert.equal(unmanagedTermination.terminated, true);
-    assert.deepEqual(terminatedPids, [99999]);
+    assert.deepEqual(unmanagedTermination.terminatedPids, [99998, 99999]);
+    assert.deepEqual(terminatedPids, [99998, 99999]);
 
     const playerResponse = await fetch(
         `http://127.0.0.1:${playerPort}/test/players?count=1`,
