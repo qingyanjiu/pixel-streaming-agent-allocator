@@ -21,6 +21,7 @@ async function listen(server) {
 }
 
 function createFakeAgent() {
+    let reportedAgentId = 'worker-test';
     const terminatedUePids = [];
     const slots = new Map([
         [
@@ -103,7 +104,12 @@ function createFakeAgent() {
         }
         if (request.method === 'GET' && url.pathname === '/slots') {
             response.writeHead(200, { 'Content-Type': 'application/json' });
-            response.end(JSON.stringify({ slots: Array.from(slots.values()) }));
+            response.end(
+                JSON.stringify({
+                    agentId: reportedAgentId,
+                    slots: Array.from(slots.values())
+                })
+            );
             return;
         }
 
@@ -141,6 +147,9 @@ function createFakeAgent() {
         server,
         slots,
         terminatedUePids,
+        setReportedAgentId(value) {
+            reportedAgentId = value;
+        },
         setPlayerCount(slotId, count) {
             slots.get(slotId).playerCount = count;
         }
@@ -228,6 +237,44 @@ test('Allocator rejects duplicate Worker management addresses', () => {
             }),
         /duplicates baseUrl/
     );
+});
+
+test('Allocator ignores a Worker whose reported agentId does not match the registry', async (t) => {
+    const fakeAgent = createFakeAgent();
+    const agentPort = await listen(fakeAgent.server);
+    const allocator = createAllocator(
+        {
+            listenHost: '127.0.0.1',
+            listenPort: 0,
+            apiKey: 'client-token',
+            autoStart: false,
+            pollIntervalMs: 60_000,
+            workers: [
+                {
+                    id: 'worker-test',
+                    baseUrl: `http://127.0.0.1:${agentPort}`,
+                    token: 'worker-token'
+                }
+            ]
+        },
+        {
+            logger: {
+                log() {},
+                warn() {},
+                error() {}
+            }
+        }
+    );
+
+    t.after(async () => {
+        await allocator.close();
+        await new Promise((resolve) => fakeAgent.server.close(resolve));
+    });
+
+    fakeAgent.setReportedAgentId('worker02');
+    await allocator.refreshWorkers();
+    assert.equal(allocator.workers[0].online, false);
+    assert.match(allocator.workers[0].lastError, /identity mismatch/i);
 });
 
 test('Allocator returns a Gateway URL and invalidates its ticket after release', async (t) => {

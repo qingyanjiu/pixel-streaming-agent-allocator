@@ -179,6 +179,22 @@ POST /processes/ue/{pid}/terminate
 
 列表会标记每个 UE PID 是否绑定当前 Worker 的 Slot。终止接口只允许关闭未绑定 Slot 的进程；已绑定进程返回 `409`，防止误杀正在使用的线路。
 
+## Allocator 控制面白名单
+
+Worker 配置支持：
+
+```json
+"allowedAllocatorIps": [
+  "192.168.1.96",
+  "127.0.0.1",
+  "::1"
+]
+```
+
+该白名单只限制需要认证的管理接口，`/health` 仍可用于连通性检查。建议只填写中央 Allocator IP，以及本机运维脚本使用的回环地址。空数组表示不限制来源，不适合多 Allocator 环境。
+
+Allocator 同时会校验 Worker 返回的 `agentId`。即使某台 Allocator 能访问 Worker，只要 `agentId` 与 `workers.json` 中的 `id` 不一致，就会把该 Worker 标记为身份不匹配并忽略。
+
 ## 测试
 
 ```powershell

@@ -136,6 +136,12 @@ function validateConfig(config) {
     if (!Array.isArray(config.slots) || config.slots.length === 0) {
         throw new Error('At least one slot must be configured.');
     }
+    if (
+        config.allowedAllocatorIps !== undefined &&
+        !Array.isArray(config.allowedAllocatorIps)
+    ) {
+        throw new Error('allowedAllocatorIps must be an array when configured.');
+    }
 
     const slotIds = new Set();
     const usedPorts = new Set();
@@ -184,6 +190,14 @@ function expandArguments(argumentsList, slot, config) {
 
 function processIsRunning(child) {
     return !!child && child.exitCode === null && child.signalCode === null && !child.killed;
+}
+
+function normalizeIpAddress(value) {
+    const address = String(value || '');
+    if (address.startsWith('::ffff:')) {
+        return address.slice('::ffff:'.length);
+    }
+    return address;
 }
 
 function childExitDescription(code, signal) {
@@ -318,6 +332,11 @@ function createWorkerAgent(config, options = {}) {
     const stopTimeoutMs = config.stopTimeoutMs || DEFAULT_STOP_TIMEOUT_MS;
     const localHost = config.localHost || '127.0.0.1';
     const logger = options.logger || console;
+    const allowedAllocatorIps = new Set(
+        (config.allowedAllocatorIps || []).map((address) =>
+            normalizeIpAddress(address)
+        )
+    );
     const processLister =
         options.listUeProcesses ||
         (() => listUeProcessesOnHost(gameExecutable));
@@ -341,6 +360,15 @@ function createWorkerAgent(config, options = {}) {
             return forwarded.split(',')[0].trim();
         }
         return request.socket.remoteAddress || 'unknown';
+    }
+
+    function callerIsAllowed(request) {
+        if (allowedAllocatorIps.size === 0) {
+            return true;
+        }
+        return allowedAllocatorIps.has(
+            normalizeIpAddress(request.socket.remoteAddress)
+        );
     }
 
     if (!fs.existsSync(gameExecutable)) {
@@ -867,6 +895,14 @@ function createWorkerAgent(config, options = {}) {
                     slotCount: slots.size,
                     time: new Date().toISOString()
                 });
+                return;
+            }
+
+            if (!callerIsAllowed(request)) {
+                logger.warn(
+                    `[worker] ${new Date().toISOString()} event=caller_ip_rejected worker=${config.agentId} client=${normalizeIpAddress(request.socket.remoteAddress)} method=${request.method} path=${url.pathname}`
+                );
+                sendJson(response, 403, { error: 'caller_ip_not_allowed' });
                 return;
             }
 

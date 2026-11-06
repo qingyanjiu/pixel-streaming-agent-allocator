@@ -256,3 +256,63 @@ test('Worker path resolution keeps Windows and WebServers directories independen
         path.resolve(path.dirname(configPath), 'turn.json')
     );
 });
+
+test('Worker rejects management calls from Allocator IPs outside the allowlist', async (t) => {
+    const [agentPort, streamerPort, playerPort, sfuPort] = await Promise.all([
+        getFreePort(),
+        getFreePort(),
+        getFreePort(),
+        getFreePort()
+    ]);
+    const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'ps-worker-ip-'));
+    const agent = createWorkerAgent(
+        {
+            agentId: 'allowed-worker',
+            listenHost: '127.0.0.1',
+            listenPort: agentPort,
+            authToken: 'test-token',
+            allowedAllocatorIps: ['203.0.113.10'],
+            windowsDirectory: repositoryRoot,
+            webServersDirectory: path.join(__dirname, 'fixtures'),
+            nodeExecutable: process.execPath,
+            signallingDirectory: 'signalling',
+            gameExecutable: process.execPath,
+            gameWorkingDirectory: '.',
+            logsDirectory: temporaryDirectory,
+            slots: [
+                {
+                    id: 'T1',
+                    streamerPort,
+                    playerPort,
+                    sfuPort,
+                    publicUrl: `http://127.0.0.1:${playerPort}/`
+                }
+            ]
+        },
+        {
+            configPath: path.join(temporaryDirectory, 'worker-test.json'),
+            logger: {
+                log() {},
+                warn() {},
+                error() {}
+            }
+        }
+    );
+    t.after(async () => {
+        await agent.close(false);
+        fs.rmSync(temporaryDirectory, { recursive: true, force: true });
+    });
+
+    await agent.listen();
+    const health = await fetch(`http://127.0.0.1:${agentPort}/health`);
+    assert.equal(health.status, 200);
+    const rejected = await fetch(`http://127.0.0.1:${agentPort}/slots`, {
+        headers: {
+            Authorization: 'Bearer test-token'
+        }
+    });
+    assert.equal(rejected.status, 403);
+    assert.deepEqual(await rejected.json(), {
+        error: 'caller_ip_not_allowed'
+    });
+});

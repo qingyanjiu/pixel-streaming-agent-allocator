@@ -3,6 +3,7 @@
   "listenHost": "0.0.0.0",
   "listenPort": 9101,
   "authToken": "replace-with-a-unique-worker-token",
+  "allowedAllocatorIps": [],
   "windowsDirectory": "C:/UE_DEMO/Windows",
   "webServersDirectory": "C:/UE_PIXEL_STREAMING_SERVER/WebServers",
   "nodeExecutable": "SignallingWebServer/platform_scripts/cmd/node/node.exe",

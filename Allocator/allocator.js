@@ -205,6 +205,11 @@ function createAllocator(config, options = {}) {
         const wasOnline = worker.online;
         try {
             const response = await workerRequest(worker, '/slots');
+            if (response.agentId !== worker.id) {
+                throw new Error(
+                    `Worker identity mismatch: expected "${worker.id}", remote reported "${response.agentId || 'unknown'}".`
+                );
+            }
             worker.online = true;
             worker.lastSeenAt = new Date().toISOString();
             worker.lastError = null;
