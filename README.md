@@ -17,6 +17,14 @@ UE 5.8 Pixel Streaming 多机器按需分配系统。
 
 ## 分离部署
 
+一键启动本机可运行的服务栈：
+
+```bat
+start-all.bat
+```
+
+脚本会检查 Gateway 配置中的 Allocator 地址；本机 Allocator 未运行时自动启动，远端 Allocator 则先检查是否可达，然后启动 Worker 和 Gateway。
+
 ### Allocator 机器
 
 只需要：
