@@ -1017,13 +1017,18 @@ tbody tr:last-child td {
 }
 
 .slot-table {
-    min-width: 760px;
+    min-width: 840px;
 }
 
 .slot-name {
     color: var(--text);
     font-size: 12px;
     font-weight: 600;
+}
+
+.pid-value {
+    color: var(--blue);
+    font-size: 11px;
 }
 
 .mono {

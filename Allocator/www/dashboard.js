@@ -443,6 +443,7 @@ function slotMatches(slot) {
         const haystack = [
             slot.id,
             slot.workerId,
+            slot.pids?.ue,
             statusLabel(status),
             slot.status
         ]
@@ -494,6 +495,7 @@ function renderSlots(summary) {
         const playerCount = Number(slot.playerCount) || 0;
         const hasLease = Boolean(slot.lease);
         const isReservation = hasLease && playerCount === 0;
+        const uePid = slot.pids?.ue || null;
         const leaseDeadline = slot.lease?.deadline || null;
         const detailMarkup = hasLease
             ? `
@@ -522,6 +524,7 @@ function renderSlots(summary) {
         row.innerHTML = `
             <td><span class="mono" title="${escapeHtml(slot.workerId)}">${escapeHtml(workerHostIp(worker, slot))}</span></td>
             <td><span class="slot-name">${escapeHtml(slot.id)}</span></td>
+            <td>${uePid ? `<span class="pid-value mono" title="Windows UE 进程 PID">${escapeHtml(uePid)}</span>` : '<span class="muted">—</span>'}</td>
             <td><span class="status-badge ${statusClass(status)}">${escapeHtml(statusLabel(status))}</span></td>
             <td>
                 <span class="player-meter">
