@@ -168,6 +168,17 @@ stop-all.bat
 http://Worker-IP:9101/health
 ```
 
+## UE 进程检查
+
+Worker Agent 提供受 Token 保护的接口：
+
+```text
+GET  /processes/ue
+POST /processes/ue/{pid}/terminate
+```
+
+列表会标记每个 UE PID 是否绑定当前 Worker 的 Slot。终止接口只允许关闭未绑定 Slot 的进程；已绑定进程返回 `409`，防止误杀正在使用的线路。
+
 ## 测试
 
 ```powershell

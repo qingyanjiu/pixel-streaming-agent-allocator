@@ -21,6 +21,7 @@ async function listen(server) {
 }
 
 function createFakeAgent() {
+    const terminatedUePids = [];
     const slots = new Map([
         [
             'T1',
@@ -55,6 +56,51 @@ function createFakeAgent() {
         }
 
         const url = new URL(request.url, `http://${request.headers.host}`);
+        if (request.method === 'GET' && url.pathname === '/processes/ue') {
+            response.writeHead(200, { 'Content-Type': 'application/json' });
+            response.end(
+                JSON.stringify({
+                    agentId: 'worker-test',
+                    configuredSlotCount: 2,
+                    processes: [
+                        {
+                            pid: 4100,
+                            processName: 'UE_ANDA.exe',
+                            executablePath: 'D:/GameBuilds/Windows/UE_ANDA.exe',
+                            managed: true,
+                            slotId: 'T1'
+                        },
+                        {
+                            pid: 99999,
+                            processName: 'UE_ANDA.exe',
+                            executablePath: 'D:/GameBuilds/Windows/UE_ANDA.exe',
+                            managed: false,
+                            slotId: null
+                        }
+                    ]
+                })
+            );
+            return;
+        }
+        const terminateUeMatch = url.pathname.match(
+            /^\/processes\/ue\/([0-9]+)\/terminate$/
+        );
+        if (request.method === 'POST' && terminateUeMatch) {
+            const pid = Number(terminateUeMatch[1]);
+            if (pid === 4100) {
+                response.writeHead(409, { 'Content-Type': 'application/json' });
+                response.end(
+                    JSON.stringify({
+                        error: 'managed UE process cannot be terminated'
+                    })
+                );
+                return;
+            }
+            terminatedUePids.push(pid);
+            response.writeHead(200, { 'Content-Type': 'application/json' });
+            response.end(JSON.stringify({ terminated: true, pid }));
+            return;
+        }
         if (request.method === 'GET' && url.pathname === '/slots') {
             response.writeHead(200, { 'Content-Type': 'application/json' });
             response.end(JSON.stringify({ slots: Array.from(slots.values()) }));
@@ -94,6 +140,7 @@ function createFakeAgent() {
     return {
         server,
         slots,
+        terminatedUePids,
         setPlayerCount(slotId, count) {
             slots.get(slotId).playerCount = count;
         }
@@ -345,6 +392,31 @@ test('Dashboard lease inventory exposes client IP and can release and stop a Slo
     assert.equal(leasedSlot.lease.clientAddress, '203.0.113.24');
     assert.equal(leasedSlot.lease.status, 'ready');
     assert.ok(Date.parse(leasedSlot.lease.deadline) > Date.now());
+    assert.equal(inventory.payload.ueProcesses.length, 2);
+    assert.equal(inventory.payload.unmanagedUeProcessCount, 1);
+    assert.deepEqual(inventory.payload.ueProcessAlertWorkers, ['worker-test']);
+
+    const terminatedUe = await requestJson(
+        `${baseUrl}/api/workers/worker-test/processes/ue/99999/terminate`,
+        {
+            method: 'POST',
+            headers,
+            body: '{}'
+        }
+    );
+    assert.equal(terminatedUe.response.status, 200);
+    assert.equal(terminatedUe.payload.terminated, true);
+    assert.deepEqual(fakeAgent.terminatedUePids, [99999]);
+
+    const managedUe = await requestJson(
+        `${baseUrl}/api/workers/worker-test/processes/ue/4100/terminate`,
+        {
+            method: 'POST',
+            headers,
+            body: '{}'
+        }
+    );
+    assert.equal(managedUe.response.status, 409);
 
     fakeAgent.setPlayerCount('T1', 1);
     await allocator.reconcileSessions();
@@ -601,6 +673,8 @@ test('Allocator reserves warm capacity, starts a cold slot, and releases disconn
     assert.doesNotMatch(dashboardHtml, /活跃 Player/);
     assert.match(dashboardHtml, /data-status="leased">已预约资源/);
     assert.match(dashboardHtml, /<th>操作<\/th>/);
+    assert.match(dashboardHtml, /UE 进程状态/);
+    assert.match(dashboardHtml, /id="ueProcessList"/);
     assert.doesNotMatch(dashboardHtml, /id="reservedList"/);
     assert.match(dashboardHtml, /id="bootLayer"/);
     assert.match(dashboardHtml, /class="auth-layer hidden" id="authLayer"/);
@@ -621,6 +695,8 @@ test('Allocator reserves warm capacity, starts a cold slot, and releases disconn
     assert.match(dashboardScriptText, /isReservation && leaseDeadline/);
     assert.match(dashboardScriptText, /workerHostIp/);
     assert.match(dashboardScriptText, /slot\.pids\?\.ue/);
+    assert.match(dashboardScriptText, /terminateUeProcess/);
+    assert.match(dashboardScriptText, /unmanagedUeProcessCount/);
     const fetchSlotsSource = dashboardScriptText.slice(
         dashboardScriptText.indexOf("async function fetchSlots"),
         dashboardScriptText.indexOf("function calculateSummary")

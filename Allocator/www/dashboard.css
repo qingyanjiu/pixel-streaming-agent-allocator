@@ -640,6 +640,7 @@ button {
 }
 
 .worker-panel,
+.ue-process-panel,
 .distribution-panel,
 .slot-panel {
     padding: 24px;
@@ -893,6 +894,149 @@ tbody tr:last-child td {
     cursor: wait;
     opacity: 0.6;
     transform: none;
+}
+
+.ue-process-panel {
+    transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.ue-process-panel.has-alert {
+    border-color: rgba(255, 113, 130, 0.32);
+    box-shadow: 0 14px 40px rgba(255, 113, 130, 0.08);
+}
+
+.process-help {
+    margin: -8px 0 16px;
+    color: var(--faint);
+    font-size: 11px;
+    line-height: 1.6;
+}
+
+.ue-process-list {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+}
+
+.ue-process-item {
+    display: grid;
+    grid-template-columns:
+        minmax(130px, 0.8fr)
+        minmax(120px, 0.7fr)
+        minmax(80px, 0.45fr)
+        minmax(100px, 0.6fr)
+        minmax(190px, 1.4fr)
+        auto;
+    align-items: center;
+    gap: 14px;
+    padding: 13px 15px;
+    border: 1px solid var(--line);
+    border-radius: 13px;
+    background: rgba(6, 16, 27, 0.42);
+}
+
+.ue-process-item.managed {
+    border-color: rgba(81, 225, 179, 0.2);
+    background: rgba(81, 225, 179, 0.045);
+}
+
+.ue-process-item.unmanaged {
+    border-color: rgba(255, 113, 130, 0.27);
+    background: rgba(255, 113, 130, 0.055);
+}
+
+.process-state,
+.process-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.process-state {
+    flex-direction: row;
+    align-items: center;
+    color: #dbe8f1;
+    font-size: 11px;
+}
+
+.process-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.managed .process-state {
+    color: var(--green);
+}
+
+.unmanaged .process-state {
+    color: var(--red);
+}
+
+.process-field span {
+    color: var(--faint);
+    font-size: 9px;
+    letter-spacing: 0.08em;
+}
+
+.process-field strong {
+    color: #d7e5ef;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.process-pid {
+    color: var(--blue) !important;
+}
+
+.process-path {
+    overflow: hidden;
+    color: var(--faint);
+    font-family: "Cascadia Mono", "Consolas", monospace;
+    font-size: 9px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.process-action {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.terminate-process-button {
+    min-height: 34px;
+    padding: 0 13px;
+    border: 1px solid rgba(255, 113, 130, 0.4);
+    border-radius: 9px;
+    background: var(--red-soft);
+    color: #ffd4da;
+    font-size: 10px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.terminate-process-button:hover {
+    border-color: rgba(255, 113, 130, 0.75);
+    background: rgba(255, 113, 130, 0.2);
+}
+
+.terminate-process-button:disabled {
+    cursor: wait;
+    opacity: 0.6;
+}
+
+.process-error {
+    padding: 12px 14px;
+    border: 1px solid rgba(255, 113, 130, 0.22);
+    border-radius: 11px;
+    background: var(--red-soft);
+    color: #ffd4da;
+    font-size: 11px;
+}
+
+.process-error strong {
+    margin-right: 6px;
 }
 
 .action-cell {
@@ -1179,9 +1323,23 @@ tbody tr:last-child td {
     }
 
     .worker-panel,
+    .ue-process-panel,
     .distribution-panel,
     .slot-panel {
         padding: 18px;
+    }
+
+    .ue-process-item {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .process-path,
+    .process-action {
+        grid-column: 1 / -1;
+    }
+
+    .process-action {
+        text-align: left;
     }
 
     .slot-heading,

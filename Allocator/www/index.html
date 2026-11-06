@@ -140,6 +140,21 @@
                 </article>
             </section>
 
+            <section class="panel ue-process-panel" id="ueProcessPanel" aria-labelledby="ueProcessTitle">
+                <div class="panel-heading">
+                    <div>
+                        <p class="eyebrow">UE 进程检查</p>
+                        <h2 id="ueProcessTitle">UE 进程状态</h2>
+                    </div>
+                    <span class="panel-count" id="ueProcessSummary">0 个进程</span>
+                </div>
+                <p class="process-help">
+                    绿色表示进程属于正在管理的线路；红色表示未绑定任何 Slot，可能是未关闭的残留进程。
+                </p>
+                <div class="ue-process-list" id="ueProcessList"></div>
+                <div class="empty-state hidden" id="ueProcessEmpty">当前没有检测到 UE 进程</div>
+            </section>
+
             <section class="overview-grid">
                 <article class="panel worker-panel">
                     <div class="panel-heading">

@@ -132,6 +132,8 @@ http://Allocator-IP:9200/dashboard/
 
 页面提供总路数、就绪/未就绪统计、Worker、Slot、Player、Session 和异常列表。
 
+驾驶舱还会汇总每台 Worker 上运行的 UE 进程，并对未绑定 Slot 的残留进程告警。手动关闭请求通过 Allocator 代理到 Worker，并使用 Worker Token 鉴权。
+
 使用 `allocator.json` 中的 `apiKey` 登录。详细说明：
 
 - [驾驶舱说明](../Docs/驾驶舱说明.md)

@@ -21,6 +21,110 @@ const DEFAULT_STARTUP_TIMEOUT_MS = 120_000;
 const DEFAULT_SERVER_TIMEOUT_MS = 30_000;
 const DEFAULT_STOP_TIMEOUT_MS = 15_000;
 const STATUS_POLL_INTERVAL_MS = 500;
+const PROCESS_LIST_TIMEOUT_MS = 10_000;
+
+function runPowerShell(script, timeoutMilliseconds = PROCESS_LIST_TIMEOUT_MS) {
+    return new Promise((resolve, reject) => {
+        const child = spawn(
+            'powershell.exe',
+            ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script],
+            {
+                windowsHide: true,
+                stdio: ['ignore', 'pipe', 'pipe']
+            }
+        );
+        let stdout = '';
+        let stderr = '';
+        let settled = false;
+        const finish = (error, value) => {
+            if (settled) {
+                return;
+            }
+            settled = true;
+            clearTimeout(timeout);
+            if (error) {
+                reject(error);
+            } else {
+                resolve(value);
+            }
+        };
+        const timeout = setTimeout(() => {
+            try {
+                child.kill();
+            } catch {
+                // The timeout error below is the actionable failure.
+            }
+            finish(new Error(`PowerShell timed out after ${timeoutMilliseconds} ms.`));
+        }, timeoutMilliseconds);
+        child.stdout.on('data', (chunk) => {
+            stdout += chunk.toString();
+        });
+        child.stderr.on('data', (chunk) => {
+            stderr += chunk.toString();
+        });
+        child.once('error', (error) => finish(error));
+        child.once('close', (code) => {
+            if (code === 0) {
+                finish(null, stdout.trim());
+            } else {
+                finish(
+                    new Error(
+                        `PowerShell exited with code ${code}${stderr.trim() ? `: ${stderr.trim().slice(0, 500)}` : ''}`
+                    )
+                );
+            }
+        });
+    });
+}
+
+async function listUeProcessesOnHost(gameExecutable) {
+    if (process.platform !== 'win32') {
+        return [];
+    }
+    const processName = path.parse(gameExecutable).name.replaceAll("'", "''");
+    const script = [
+        `$processName = '${processName}'`,
+        '$items = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -ieq $processName } | ForEach-Object {',
+        '  $executablePath = $null',
+        '  try { $executablePath = $_.Path } catch {}',
+        '  $startTime = $null',
+        "  try { $startTime = $_.StartTime.ToUniversalTime().ToString('o') } catch {}",
+        '  [pscustomobject]@{',
+        '    pid = $_.Id',
+        "    processName = $_.ProcessName + '.exe'",
+        '    executablePath = $executablePath',
+        '    startTime = $startTime',
+        '  }',
+        '})',
+        'ConvertTo-Json -InputObject $items -Compress'
+    ].join('\n');
+    const output = await runPowerShell(script);
+    if (!output) {
+        return [];
+    }
+    const parsed = JSON.parse(output);
+    const records = Array.isArray(parsed) ? parsed : [parsed];
+    return records
+        .map((record) => ({
+            pid: Number(record.pid),
+            processName: record.processName || `${processName}.exe`,
+            executablePath: record.executablePath || null,
+            startTime: record.startTime || null
+        }))
+        .filter((record) => Number.isInteger(record.pid) && record.pid > 0);
+}
+
+async function terminateUeProcessOnHost(pid) {
+    if (process.platform !== 'win32') {
+        throw new Error('UE process termination is only supported on Windows.');
+    }
+    if (!isPositiveInteger(pid)) {
+        throw new Error('UE process PID must be a positive integer.');
+    }
+    await runPowerShell(
+        `Stop-Process -Id ${Number(pid)} -Force -ErrorAction Stop`
+    );
+}
 
 function validateConfig(config) {
     if (!config.agentId || typeof config.agentId !== 'string') {
@@ -214,6 +318,12 @@ function createWorkerAgent(config, options = {}) {
     const stopTimeoutMs = config.stopTimeoutMs || DEFAULT_STOP_TIMEOUT_MS;
     const localHost = config.localHost || '127.0.0.1';
     const logger = options.logger || console;
+    const processLister =
+        options.listUeProcesses ||
+        (() => listUeProcessesOnHost(gameExecutable));
+    const processTerminator =
+        options.terminateUeProcess ||
+        ((pid) => terminateUeProcessOnHost(pid));
 
     function logSlotEvent(slot, event, fields = {}) {
         const details = Object.entries(fields)
@@ -277,6 +387,60 @@ function createWorkerAgent(config, options = {}) {
             throw error;
         }
         return slot;
+    }
+
+    async function listUeProcesses(force = false) {
+        const records = await processLister();
+        return records.map((record) => {
+            const pid = Number(record.pid);
+            const managedSlot = Array.from(slots.values()).find(
+                (slot) =>
+                    processIsRunning(slot.ueChild) &&
+                    slot.ueChild.pid === pid
+            );
+            return {
+                ...record,
+                pid,
+                managed: Boolean(managedSlot),
+                slotId: managedSlot?.config.id || null
+            };
+        });
+    }
+
+    async function terminateUnmanagedUeProcess(pid) {
+        if (!isPositiveInteger(pid)) {
+            const error = new Error('UE process PID must be a positive integer.');
+            error.statusCode = 400;
+            throw error;
+        }
+        const processes = await listUeProcesses(true);
+        const target = processes.find((record) => record.pid === pid);
+        if (!target) {
+            const error = new Error(`UE process ${pid} was not found.`);
+            error.statusCode = 404;
+            throw error;
+        }
+        if (target.managed) {
+            const error = new Error(
+                `UE process ${pid} belongs to managed Slot ${target.slotId} and cannot be closed from this endpoint.`
+            );
+            error.statusCode = 409;
+            error.slotId = target.slotId;
+            throw error;
+        }
+        await processTerminator(pid);
+        logSlotEvent(
+            {
+                config: {
+                    id: target.slotId || 'unmanaged'
+                }
+            },
+            'unmanaged_ue_process_terminated',
+            {
+                pid
+            }
+        );
+        return target;
     }
 
     function saveProcessState() {
@@ -714,6 +878,33 @@ function createWorkerAgent(config, options = {}) {
                 return;
             }
 
+            if (request.method === 'GET' && url.pathname === '/processes/ue') {
+                sendJson(response, 200, {
+                    agentId: config.agentId,
+                    configuredSlotCount: slots.size,
+                    processes: await listUeProcesses()
+                });
+                return;
+            }
+
+            const terminateUeMatch = url.pathname.match(
+                /^\/processes\/ue\/([0-9]+)\/terminate$/
+            );
+            if (request.method === 'POST' && terminateUeMatch) {
+                const pid = Number(terminateUeMatch[1]);
+                logger.log(
+                    `[worker] ${new Date().toISOString()} event=unmanaged_ue_process_terminate_request worker=${config.agentId} pid=${pid} client=${getClientAddress(request)}`
+                );
+                const processInfo = await terminateUnmanagedUeProcess(pid);
+                sendJson(response, 200, {
+                    terminated: true,
+                    pid,
+                    workerId: config.agentId,
+                    process: processInfo
+                });
+                return;
+            }
+
             if (request.method === 'GET' && url.pathname === '/slots') {
                 await Promise.all(Array.from(slots.values(), (slot) => refreshSlot(slot)));
                 sendJson(response, 200, {
@@ -769,7 +960,8 @@ function createWorkerAgent(config, options = {}) {
         } catch (error) {
             logger.error(`[${config.agentId}] HTTP ${request.method} ${request.url}: ${error.stack || error.message}`);
             sendJson(response, error.statusCode || 500, {
-                error: error.message || 'internal_error'
+                error: error.message || 'internal_error',
+                slotId: error.slotId || undefined
             });
         }
     });
@@ -812,6 +1004,7 @@ function createWorkerAgent(config, options = {}) {
         startSlot,
         stopSlot,
         refreshSlot,
+        listUeProcesses,
         close,
         listen() {
             return new Promise((resolve, reject) => {
@@ -874,6 +1067,7 @@ if (require.main === module) {
 
 module.exports = {
     createWorkerAgent,
+    listUeProcessesOnHost,
     resolveWorkerPaths,
     validateConfig
 };

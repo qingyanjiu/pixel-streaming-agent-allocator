@@ -83,9 +83,28 @@ test('Worker Agent starts, reports readiness, observes players, and stops one sl
     };
 
     assert.ok(fs.existsSync(fakeWilbur));
-    const agent = createWorkerAgent(config, {
+    let agent;
+    const terminatedPids = [];
+    agent = createWorkerAgent(config, {
         configPath: path.join(temporaryDirectory, 'worker-test.json'),
-        logger
+        logger,
+        listUeProcesses: async () => [
+            {
+                pid: agent.slots.get('T1').ueChild?.pid || 101,
+                processName: 'node.exe',
+                executablePath: process.execPath,
+                startTime: new Date().toISOString()
+            },
+            {
+                pid: 99999,
+                processName: 'UE_ANDA.exe',
+                executablePath: 'D:/GameBuilds/Windows/UE_ANDA.exe',
+                startTime: new Date().toISOString()
+            }
+        ],
+        terminateUeProcess: async (pid) => {
+            terminatedPids.push(pid);
+        }
     });
     t.after(async () => {
         await agent.close(true);
@@ -111,6 +130,34 @@ test('Worker Agent starts, reports readiness, observes players, and stops one sl
     assert.ok(logLines.some((line) => line.includes('event=slot_start_request')));
     assert.ok(logLines.some((line) => line.includes('event=slot_starting')));
     assert.ok(logLines.some((line) => line.includes('event=slot_ready')));
+
+    const processInventory = await requestJson(
+        `http://127.0.0.1:${agentPort}/processes/ue`,
+        { headers: authHeaders }
+    );
+    assert.equal(processInventory.configuredSlotCount, 1);
+    assert.equal(processInventory.processes.length, 2);
+    assert.equal(
+        processInventory.processes.find((process) => process.pid === started.pids.ue).slotId,
+        'T1'
+    );
+    assert.equal(
+        processInventory.processes.find((process) => process.pid === 99999).managed,
+        false
+    );
+
+    const managedTermination = await fetch(
+        `http://127.0.0.1:${agentPort}/processes/ue/${started.pids.ue}/terminate`,
+        { method: 'POST', headers: authHeaders }
+    );
+    assert.equal(managedTermination.status, 409);
+
+    const unmanagedTermination = await requestJson(
+        `http://127.0.0.1:${agentPort}/processes/ue/99999/terminate`,
+        { method: 'POST', headers: authHeaders }
+    );
+    assert.equal(unmanagedTermination.terminated, true);
+    assert.deepEqual(terminatedPids, [99999]);
 
     const playerResponse = await fetch(
         `http://127.0.0.1:${playerPort}/test/players?count=1`,

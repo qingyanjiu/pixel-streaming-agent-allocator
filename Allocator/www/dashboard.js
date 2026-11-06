@@ -27,6 +27,10 @@ const elements = {
     statAvailable: document.getElementById("statAvailable"),
     statPlayers: document.getElementById("statPlayers"),
     statLeased: document.getElementById("statLeased"),
+    ueProcessPanel: document.getElementById("ueProcessPanel"),
+    ueProcessSummary: document.getElementById("ueProcessSummary"),
+    ueProcessList: document.getElementById("ueProcessList"),
+    ueProcessEmpty: document.getElementById("ueProcessEmpty"),
     noticeBanner: document.getElementById("noticeBanner"),
     workerSummary: document.getElementById("workerSummary"),
     workerRows: document.getElementById("workerRows"),
@@ -118,16 +122,21 @@ function formatRelative(value) {
     return `${Math.floor(elapsed / 3600000)} 小时前`;
 }
 
+function hostIpFromAddress(value) {
+    if (!value) {
+        return "";
+    }
+    try {
+        return new URL(value).hostname;
+    } catch {
+        return String(value);
+    }
+}
+
 function workerHostIp(worker, slot) {
-    for (const value of [worker?.baseUrl, slot.publicUrl]) {
-        if (!value) {
-            continue;
-        }
-        try {
-            return new URL(value).hostname;
-        } catch {
-            // Fall through to a readable raw value.
-        }
+    const address = hostIpFromAddress(worker?.baseUrl || slot.publicUrl);
+    if (address) {
+        return address;
     }
     return worker?.id || slot.workerId;
 }
@@ -347,6 +356,129 @@ function renderWorkers(summary) {
     state.workerId = elements.workerFilter.value;
 }
 
+function renderUeProcesses(data) {
+    const processes = (data.ueProcesses || []).slice().sort((left, right) => {
+        if (left.managed !== right.managed) {
+            return left.managed ? 1 : -1;
+        }
+        return left.pid - right.pid;
+    });
+    const errors = data.ueProcessErrors || [];
+    const unmanagedCount = processes.filter((processInfo) => !processInfo.managed).length;
+    const alert = unmanagedCount > 0 || errors.length > 0;
+    elements.ueProcessPanel.classList.toggle("has-alert", alert);
+    elements.ueProcessSummary.textContent =
+        processes.length > 0
+            ? `${processes.length} 个进程${unmanagedCount > 0 ? ` · ${unmanagedCount} 个异常` : ""}`
+            : "0 个进程";
+    elements.ueProcessList.innerHTML = [
+        ...errors.map(
+            (item) => `
+                <div class="process-error">
+                    <strong>${escapeHtml(item.workerId)}</strong>
+                    无法读取进程列表：${escapeHtml(item.error)}
+                </div>
+            `
+        ),
+        ...processes.map((processInfo) => {
+            const managed = processInfo.managed === true;
+            return `
+                <article class="ue-process-item ${managed ? "managed" : "unmanaged"}">
+                    <div class="process-state">
+                        <span class="process-dot"></span>
+                        <strong>${managed ? "已绑定线路" : "未绑定线路"}</strong>
+                    </div>
+                    <div class="process-field">
+                        <span>服务器 IP</span>
+                        <strong class="mono">${escapeHtml(hostIpFromAddress(processInfo.workerAddress))}</strong>
+                    </div>
+                    <div class="process-field">
+                        <span>UE PID</span>
+                        <strong class="mono process-pid">${escapeHtml(processInfo.pid)}</strong>
+                    </div>
+                    <div class="process-field process-owner">
+                        <span>${managed ? "所属线路" : "状态"}</span>
+                        <strong>${escapeHtml(managed ? processInfo.slotId : "需要处理")}</strong>
+                    </div>
+                    <div class="process-path" title="${escapeHtml(processInfo.executablePath || "")}">
+                        ${escapeHtml(processInfo.executablePath || "无法读取可执行文件路径")}
+                    </div>
+                    <div class="process-action">
+                        ${
+                            managed
+                                ? '<span class="muted">受 Worker 管理</span>'
+                                : `
+                                    <button
+                                        class="terminate-process-button"
+                                        type="button"
+                                        data-worker-id="${escapeHtml(processInfo.workerId)}"
+                                        data-pid="${escapeHtml(processInfo.pid)}"
+                                    >关闭进程</button>
+                                `
+                        }
+                    </div>
+                </article>
+            `;
+        })
+    ].join("");
+    elements.ueProcessEmpty.classList.toggle(
+        "hidden",
+        processes.length + errors.length > 0
+    );
+}
+
+async function terminateUeProcess(button) {
+    const workerId = button.dataset.workerId;
+    const pid = button.dataset.pid;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 35_000);
+    button.disabled = true;
+    button.textContent = "正在关闭...";
+    try {
+        const response = await fetch(
+            `/api/workers/${encodeURIComponent(workerId)}/processes/ue/${encodeURIComponent(pid)}/terminate`,
+            {
+                method: "POST",
+                headers: {
+                    Accept: "application/json",
+                    "Content-Type": "application/json",
+                    "X-API-Key": state.apiKey
+                },
+                body: "{}",
+                cache: "no-store",
+                signal: controller.signal
+            }
+        );
+        const body = await response.json().catch(() => ({}));
+        if (response.status === 401) {
+            throw Object.assign(new Error("Client API Key 无效"), { code: 401 });
+        }
+        if (!response.ok) {
+            throw new Error(body.error || `HTTP ${response.status}`);
+        }
+        showToast(`已关闭 ${workerId} 上未关联线路的 UE 进程 ${pid}`, "success");
+        await refreshDashboard({ silent: true });
+    } catch (error) {
+        if (error.code === 401) {
+            sessionStorage.removeItem(API_KEY_STORAGE);
+            state.apiKey = "";
+            showAuth("API Key 无效，请重新输入。");
+            return;
+        }
+        const message =
+            error.name === "AbortError"
+                ? "关闭进程超时，请刷新后检查"
+                : `关闭进程失败：${error.message}`;
+        showToast(message);
+    } finally {
+        window.clearTimeout(timeout);
+        if (button.isConnected) {
+            button.disabled = false;
+            button.textContent = "关闭进程";
+        }
+    }
+}
+
 function updateReservationCountdowns() {
     for (const item of elements.slotRows.querySelectorAll("[data-deadline]")) {
         item.textContent = formatRemaining(item.dataset.deadline);
@@ -541,7 +673,7 @@ function renderSlots(summary) {
     elements.slotEmpty.classList.toggle("hidden", slots.length > 0);
 }
 
-function renderNotice(summary) {
+function renderNotice(summary, data) {
     const failedSlots = summary.slots.filter((slot) => slot.status === "failed");
     const offlineWorkers = summary.workers.filter((worker) => !worker.online);
     const messages = [];
@@ -550,6 +682,14 @@ function renderNotice(summary) {
     }
     if (failedSlots.length) {
         messages.push(`${failedSlots.length} 个 Slot 异常：${failedSlots.map((slot) => slot.id).join("、")}`);
+    }
+    if (Number(data.unmanagedUeProcessCount) > 0) {
+        messages.push(
+            `${data.unmanagedUeProcessCount} 个 UE 进程未绑定任何 Slot，请在 UE 进程状态中确认`
+        );
+    }
+    if (Array.isArray(data.ueProcessErrors) && data.ueProcessErrors.length) {
+        messages.push(`${data.ueProcessErrors.length} 个 Worker 无法读取 UE 进程列表`);
     }
     elements.noticeBanner.textContent = messages.join(" · ");
     elements.noticeBanner.classList.toggle("hidden", messages.length === 0);
@@ -576,8 +716,9 @@ function renderDashboard(data) {
     elements.footerSync.textContent = `最近同步 ${formatTime(state.lastUpdatedAt.toISOString())}`;
 
     renderWorkers(summary);
+    renderUeProcesses(data);
     renderSlots(summary);
-    renderNotice(summary);
+    renderNotice(summary, data);
 }
 
 async function refreshDashboard({ silent = false, fromForm = false } = {}) {
@@ -681,6 +822,13 @@ elements.slotRows.addEventListener("click", (event) => {
     const button = event.target.closest("[data-release-worker]");
     if (button) {
         void releaseReservation(button);
+    }
+});
+
+elements.ueProcessList.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-pid][data-worker-id]");
+    if (button) {
+        void terminateUeProcess(button);
     }
 });
 

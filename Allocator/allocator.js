@@ -234,6 +234,65 @@ function createAllocator(config, options = {}) {
         await Promise.all(workers.map((worker) => refreshWorker(worker)));
     }
 
+    async function collectUeProcesses() {
+        const results = await Promise.all(
+            workers.map(async (worker) => {
+                if (!worker.online) {
+                    return {
+                        worker,
+                        processes: [],
+                        configuredSlotCount: null,
+                        error: null
+                    };
+                }
+                try {
+                    const response = await workerRequest(worker, '/processes/ue');
+                    return {
+                        worker,
+                        processes: Array.isArray(response.processes)
+                            ? response.processes.map((processInfo) => ({
+                                  ...processInfo,
+                                  workerId: worker.id,
+                                  workerAddress: worker.baseUrl
+                              }))
+                            : [],
+                        configuredSlotCount:
+                            Number(response.configuredSlotCount) || 0,
+                        error: null
+                    };
+                } catch (error) {
+                    return {
+                        worker,
+                        processes: [],
+                        configuredSlotCount: null,
+                        error: error.message
+                    };
+                }
+            })
+        );
+        const processes = results.flatMap((result) => result.processes);
+        const errors = results
+            .filter((result) => result.error)
+            .map((result) => ({
+                workerId: result.worker.id,
+                error: result.error
+            }));
+        const alertWorkers = results
+            .filter(
+                (result) =>
+                    result.error ||
+                    result.processes.some((processInfo) => !processInfo.managed) ||
+                    result.processes.length > result.configuredSlotCount
+            )
+            .map((result) => result.worker.id);
+        return {
+            processes,
+            errors,
+            alertWorkers,
+            unmanagedCount: processes.filter((processInfo) => !processInfo.managed).length
+        };
+    }
+
     function allSlots() {
         const result = [];
         for (const worker of workers) {
@@ -948,6 +1007,7 @@ function createAllocator(config, options = {}) {
 
             if (request.method === 'GET' && url.pathname === '/api/slots') {
                 await refreshWorkers();
+                const processInventory = await collectUeProcesses();
                 sendJson(response, 200, {
                     workers: workers.map((worker) => ({
                         id: worker.id,
@@ -964,8 +1024,52 @@ function createAllocator(config, options = {}) {
                             leasedTo: leaseSession?.id || null,
                             lease: serializeLease(leaseSession)
                         };
-                    })
+                    }),
+                    ueProcesses: processInventory.processes,
+                    ueProcessErrors: processInventory.errors,
+                    ueProcessAlertWorkers: processInventory.alertWorkers,
+                    unmanagedUeProcessCount: processInventory.unmanagedCount
                 });
+                return;
+            }
+
+            const terminateUeMatch = url.pathname.match(
+                /^\/api\/workers\/([^/]+)\/processes\/ue\/([0-9]+)\/terminate$/
+            );
+            if (request.method === 'POST' && terminateUeMatch) {
+                const workerId = decodeURIComponent(terminateUeMatch[1]);
+                const pid = Number(terminateUeMatch[2]);
+                const worker = workersById.get(workerId);
+                if (!worker) {
+                    sendJson(response, 404, { error: 'worker_not_found' });
+                    return;
+                }
+                try {
+                    const result = await workerRequest(
+                        worker,
+                        `/processes/ue/${pid}/terminate`,
+                        {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: '{}'
+                        }
+                    );
+                    logEvent('unmanaged_ue_process_terminated', {
+                        worker: workerId,
+                        pid,
+                        client: clientAddress
+                    });
+                    sendJson(response, 200, result);
+                } catch (error) {
+                    const statusMatch = /^HTTP (\d{3})/.exec(error.message);
+                    sendJson(
+                        response,
+                        statusMatch ? Number(statusMatch[1]) : 502,
+                        { error: error.message }
+                    );
+                }
                 return;
             }
 
